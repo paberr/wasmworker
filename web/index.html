@@ -8,9 +8,11 @@
         <div id="wrapper">
             <h1>Main Thread/Wasm Web Worker Interaction</h1>
 
-            <input type="text" id="inputNumber" />
+            <input type="number" id="num_keys" placeholder="Num keys" />
+            <input type="checkbox" id="webworker" />
+            <label for="webworker">Use WebWorker</label>
 
-            <div id="resultField"></div>
+            <button id="run">Run</button>
         </div>
 
         <!-- Note that there is no `type="module"` in the script tag -->
