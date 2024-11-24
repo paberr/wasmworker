@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "scripts": {
+    "postinstall": "playwright install chromium firefox",
+    "build:web": "wasm-pack build --target web --out-name test --out-dir out/web/pkg && shx cp index.* out/web",
+    "pretest": "npm run build:web",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.10.1",
+    "serve": "^14.2.4",
+    "shx": "^0.3.4"
+  }
+}
