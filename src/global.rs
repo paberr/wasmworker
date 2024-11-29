@@ -7,17 +7,13 @@ use crate::pool::{WebWorkerPool, WorkerPoolOptions};
 static WORKER_POOL: OnceCell<SendWrapper<WebWorkerPool>> = OnceCell::const_new();
 
 #[wasm_bindgen]
-pub async fn init_worker_pool(num_workers: usize, path: Option<String>) {
+pub async fn init_worker_pool(options: WorkerPoolOptions) {
     WORKER_POOL
         .get_or_init(|| async move {
             SendWrapper::new(
-                WebWorkerPool::with_options(WorkerPoolOptions {
-                    num_workers: Some(num_workers),
-                    path,
-                    ..Default::default()
-                })
-                .await
-                .expect_throw("Couldn't instantiate worker pool"),
+                WebWorkerPool::with_options(options)
+                    .await
+                    .expect_throw("Couldn't instantiate worker pool"),
             )
         })
         .await;

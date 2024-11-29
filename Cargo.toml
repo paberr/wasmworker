@@ -56,5 +56,5 @@ features = [
 version = "0.3"
 
 [features]
-default = []
+default = ["serde"]
 serde = []
