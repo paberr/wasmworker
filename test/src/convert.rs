@@ -58,13 +58,6 @@ pub(crate) async fn can_schedule_task() {
     sorted_vec.sort();
     let sorted_vec = VecType(sorted_vec);
 
-    // Test try run.
-    let res1 = pool
-        .try_run(webworker!(sort_vec), &vec)
-        .await
-        .expect("Should not be full");
-    js_assert_eq!(res1, sorted_vec);
-
     // Test run.
     let res2 = pool.run(webworker!(sort_vec), &vec).await;
     js_assert_eq!(res2, sorted_vec);

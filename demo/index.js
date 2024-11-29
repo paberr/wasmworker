@@ -1,5 +1,5 @@
 // Import required functions.
-import init, { runWorker, runPool, runParMap } from "./pkg/webworker_demo.js";
+import init, { runWorker, runPool, runParMap } from "./pkg/wasmworker_demo.js";
 
 async function run_wasm() {
   // Load wasm bindgen.

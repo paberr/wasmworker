@@ -1,6 +1,10 @@
 use js_sys::JsString;
 use wasm_bindgen::prelude::wasm_bindgen;
 
+/// The initialization code for the worker,
+/// which will be loaded as a blob.
+///
+/// `{{wasm}}` will be replaced later by an actual path.
 pub(crate) const WORKER_JS: &str = r#"
 console.debug('Initializing worker');
 
@@ -39,6 +43,8 @@ console.debug('Initializing worker');
 })();
 "#;
 
+/// This function normally returns the path of our wasm-bindgen glue file.
+/// It only works in module environments, though.
 pub(crate) fn main_js() -> JsString {
     #[wasm_bindgen]
     extern "C" {

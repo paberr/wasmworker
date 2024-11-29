@@ -6,7 +6,7 @@ In contrast to many other libraries like [wasm-bindgen-rayon](https://github.com
   - [Setting up](#setting-up)
   - [Outsourcing tasks](#outsourcing-tasks)
     - [WebWorker](#webworker)
-    - [WorkerPool](#workerpool)
+    - [WebWorkerPool](#webworkerpool)
     - [Iterator extension](#iterator-extension)
   - [Feature detection](#feature-detection)
 - [FAQ](#faq)
@@ -32,7 +32,7 @@ Without the `serde` feature, only functions with the type `fn(Box<[u8]>) -> Box<
 This is useful for users that do not want a direct serde dependency. Internally, the library always uses serde, though.
 
 You can then start using the library without further setup.
-If you plan on using the global `WorkerPool` (using the iterator extensions or `worker_pool()`), you can *optionally* configure this pool:
+If you plan on using the global `WebWorkerPool` (using the iterator extensions or `worker_pool()`), you can *optionally* configure this pool:
 ```rust
 // Importing it publicly will also expose the function on the JavaScript side.
 // You can instantiate the pool both via Rust and JS.
@@ -49,7 +49,7 @@ async fn startup() {
 ### Outsourcing tasks
 The library offers three ways of outsourcing function calls onto concurrent workers:
 1. `WebWorker`: a single worker, to which tasks can be queued to.
-2. `WorkerPool`: a pool of multiple workers, to which tasks are distributed.
+2. `WebWorkerPool`: a pool of multiple workers, to which tasks are distributed.
 3. `par_map`: an extension to regular iterators, which allows to execute a function on every element of the iterator in parallel using the default worker pool.
 
 All approaches require the functions that should be executed to be annotated with the `#[webworker_fn]` macro.
@@ -90,7 +90,7 @@ let res = worker.run(webworker!(sort_vec), &VecType(vec![5, 2, 8])).await;
 assert_eq!(res.0, vec![2, 5, 8]);
 ```
 
-#### WorkerPool
+#### WebWorkerPool
 Most of the time, we probably want to schedule tasks to a pool of workers, though.
 The default worker pool is instantiated on first use and can be configured using `init_worker_pool()` as described above.
 It uses a round-robin scheduler (with the second option being a load based scheduler), a number of `navigator.hardwareConcurrency` separate workers, and the default inferred path.
@@ -128,7 +128,7 @@ let res: Vec<VecType> = some_vec.iter().par_map(webworker!(sort_vec)).await;
 
     So far, this library has only been tested with `--target web`.
     Other targets seem to generally be problematic in that the wasm glue is inaccessible or paths are not correct.
-    Both the `Worker` and `WorkerPool` have an option to set a custom path, which should make it possible to support other targets dynamically, though.
+    Both the `Worker` and `WebWorkerPool` have an option to set a custom path, which should make it possible to support other targets dynamically, though.
 
 3. _Can I use bundlers?_
 
