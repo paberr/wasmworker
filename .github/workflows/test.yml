@@ -11,9 +11,8 @@ jobs:
       - name: Install npm
         working-directory: ./test
         run: npm ci
-      - name: Trigger toolchain installation
-        working-directory: ./test
-        run: cargo fetch
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Run tests
         working-directory: ./test
         run: npm test

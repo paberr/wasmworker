@@ -2,8 +2,14 @@
 `wasmworker` is a library that provides easy access to parallelization on web targets when compiled to WebAssembly using [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen).
 In contrast to many other libraries like [wasm-bindgen-rayon](https://github.com/RReverser/wasm-bindgen-rayon), this library does not require SharedArrayBuffer support.
 
-<!-- START doctoc -->
-<!-- END doctoc -->
+- [Usage](#usage)
+  - [Setting up](#setting-up)
+  - [Outsourcing tasks](#outsourcing-tasks)
+    - [WebWorker](#webworker)
+    - [WorkerPool](#workerpool)
+    - [Iterator extension](#iterator-extension)
+  - [Feature detection](#feature-detection)
+- [FAQ](#faq)
 
 ## Usage
 The library consists of two crates:
@@ -40,7 +46,7 @@ async fn startup() {
 }
 ```
 
-### Outsourcing tasks to a web worker
+### Outsourcing tasks
 The library offers three ways of outsourcing function calls onto concurrent workers:
 1. `WebWorker`: a single worker, to which tasks can be queued to.
 2. `WorkerPool`: a pool of multiple workers, to which tasks are distributed.
