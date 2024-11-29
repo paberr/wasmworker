@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use webworker::{iter_ext::IteratorExt, webworker, worker_pool, WebWorker};
-use webworker_proc_macro::webworker_fn;
+use wasmworker::{iter_ext::IteratorExt, webworker, worker_pool, WebWorker};
+use wasmworker_proc_macro::webworker_fn;
 
 use crate::js_assert_eq;
 
@@ -44,9 +44,8 @@ pub(crate) async fn can_limit_tasks() {
 
     // Test try run.
     let res1 = worker.try_run(webworker!(sort_vec), &vec).await;
-    match res1 {
-        Ok(_) => wasm_bindgen::throw_str("Should not be able to obtain permit"),
-        Err(_) => {}
+    if res1.is_ok() {
+        wasm_bindgen::throw_str("Should not be able to obtain permit")
     }
 }
 

@@ -5,16 +5,11 @@ use wasm_bindgen::{prelude::wasm_bindgen, UnwrapThrowExt};
 use super::WebWorkerPool;
 
 #[wasm_bindgen]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub enum Strategy {
+    #[default]
     RoundRobin,
     LoadBased,
-}
-
-impl Default for Strategy {
-    fn default() -> Self {
-        Strategy::RoundRobin
-    }
 }
 
 pub(super) struct Scheduler {

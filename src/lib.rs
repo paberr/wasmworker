@@ -1,3 +1,4 @@
+#![allow(clippy::borrowed_box)]
 pub use global::{init_worker_pool, worker_pool};
 pub use webworker::WebWorker;
 

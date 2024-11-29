@@ -1,5 +1,5 @@
 [package]
-name = "webworker-proc-macro"
+name = "wasmworker-proc-macro"
 edition = "2021"
 
 description.workspace = true

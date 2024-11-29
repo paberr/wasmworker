@@ -8,11 +8,7 @@ pub struct WebWorkerFn<T, R> {
 
 impl<T, R> Clone for WebWorkerFn<T, R> {
     fn clone(&self) -> Self {
-        Self {
-            name: self.name,
-            _arg: PhantomData,
-            _res: PhantomData,
-        }
+        *self
     }
 }
 

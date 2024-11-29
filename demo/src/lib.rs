@@ -2,9 +2,9 @@ use send_wrapper::SendWrapper;
 use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 use wasm_bindgen::{prelude::wasm_bindgen, JsCast, UnwrapThrowExt};
+use wasmworker::{iter_ext::IteratorExt, webworker, worker_pool, WebWorker};
+use wasmworker_proc_macro::webworker_fn;
 use web_sys::{HtmlElement, HtmlInputElement};
-use webworker::{iter_ext::IteratorExt, webworker, worker_pool, WebWorker};
-use webworker_proc_macro::webworker_fn;
 
 /// A wrapper type to demonstrate serde functionality.
 #[derive(Serialize, Deserialize)]

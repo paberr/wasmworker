@@ -20,9 +20,9 @@ pub fn webworker_fn(_attr: TokenStream, item: TokenStream) -> TokenStream {
             const _: () = {
                 #[wasm_bindgen::prelude::wasm_bindgen]
                 pub fn #wrapper_fn_name(arg: Box<[u8]>) -> Box<[u8]> {
-                    let arg = webworker::convert::from_bytes(&arg);
+                    let arg = wasmworker::convert::from_bytes(&arg);
                     let res = super::#fn_name(arg);
-                    let res = webworker::convert::to_bytes(&res);
+                    let res = wasmworker::convert::to_bytes(&res);
                     res
                 }
             };

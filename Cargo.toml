@@ -5,17 +5,17 @@ members = [".", "proc-macro", "demo", "test"]
 description = "Dispatching tasks to a WebWorker without `SharedArrayBuffers`."
 authors = ["Pascal Berrang <rust@paberr.net>"]
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/paberr/webworker"
-repository = "https://github.com/paberr/webworker"
+homepage = "https://github.com/paberr/wasmworker"
+repository = "https://github.com/paberr/wasmworker"
 readme = "README.md"
 keywords = ["webworker", "parallelism", "wasm"]
 
 [workspace.dependencies]
-webworker = { path = ".", features = ["serde"]}
-webworker-proc-macro = { path = "proc-macro" }
+wasmworker = { path = ".", features = ["serde"]}
+wasmworker-proc-macro = { path = "proc-macro" }
 
 [package]
-name = "webworker"
+name = "wasmworker"
 version = "0.1.0"
 edition = "2021"
 
@@ -54,10 +54,6 @@ features = [
     "Navigator",
 ]
 version = "0.3"
-
-[dev-dependencies]
-wasm-bindgen-test = "0.3"
-webworker-proc-macro = { workspace = true }
 
 [features]
 default = []

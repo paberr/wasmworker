@@ -35,9 +35,9 @@ impl WebWorker {
 
         let mut wasm_path_owned = None;
         let wasm_path = wasm_path.unwrap_or_else(|| {
-            // TODO: Make nicer
+            // Calculate path to wasm import.
             wasm_path_owned = Some(main_js().as_string().unwrap_throw());
-            &wasm_path_owned.as_ref().unwrap_throw()
+            wasm_path_owned.as_ref().unwrap_throw()
         });
 
         let code = Array::new();

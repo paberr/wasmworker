@@ -33,7 +33,7 @@ impl WorkerPoolOptions {
 
 impl WorkerPoolOptions {
     fn path(&self) -> Option<&str> {
-        self.path.as_ref().map(String::as_str)
+        self.path.as_deref()
     }
 
     fn strategy(&self) -> Strategy {
@@ -113,7 +113,7 @@ impl WebWorkerPool {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        let worker_id = self.scheduler.schedule(&self);
+        let worker_id = self.scheduler.schedule(self);
         self.workers[worker_id].try_run(func, arg).await
     }
 
@@ -130,7 +130,7 @@ impl WebWorkerPool {
         func: WebWorkerFn<Box<[u8]>, Box<[u8]>>,
         arg: &Box<[u8]>,
     ) -> Result<Box<[u8]>, Full> {
-        let worker_id = self.scheduler.schedule(&self);
+        let worker_id = self.scheduler.schedule(self);
         self.workers[worker_id].try_run_bytes(func, arg).await
     }
 
@@ -140,7 +140,7 @@ impl WebWorkerPool {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        let worker_id = self.scheduler.schedule(&self);
+        let worker_id = self.scheduler.schedule(self);
         self.workers[worker_id]
             .run_internal(func, arg.borrow())
             .await
