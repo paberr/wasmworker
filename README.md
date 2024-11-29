@@ -28,6 +28,7 @@ wasmworker-proc-macro = "0.1"
 The `wasmworker` crate comes with a default feature called `serde`, which allows running any function on a web worker under the following two conditions:
 1. The function takes a single argument, which implements `serde::Serialize + serde::Deserialize<'de>`.
 2. The return type implements `serde::Serialize + serde::Deserialize<'de>`.
+
 Without the `serde` feature, only functions with the type `fn(Box<[u8]>) -> Box<[u8]>` can be run on a worker.
 This is useful for users that do not want a direct serde dependency. Internally, the library always uses serde, though.
 
@@ -36,7 +37,7 @@ If you plan on using the global `WebWorkerPool` (using the iterator extensions o
 ```rust
 // Importing it publicly will also expose the function on the JavaScript side.
 // You can instantiate the pool both via Rust and JS.
-pub use wasmworker::init_worker_pool;
+pub use wasmworker::{init_worker_pool, WorkerPoolOptions};
 
 async fn startup() {
     init_worker_pool(WorkerPoolOptions {
@@ -55,7 +56,7 @@ The library offers three ways of outsourcing function calls onto concurrent work
 All approaches require the functions that should be executed to be annotated with the `#[webworker_fn]` macro.
 This macro ensures that the functions are available to the web worker instances:
 
-```rust
+```rust,ignore
 use serde::{Deserialize, Serialize};
 use wasmworker_proc_macro::webworker_fn;
 
@@ -74,7 +75,7 @@ pub fn sort_vec(mut v: VecType) -> VecType {
 Whenever we want to execute a function, we need to pass the corresponding `WebWorkerFn` object to the worker.
 This object describes the function to the worker and can be safely obtained via the `webworker!()` macro:
 
-```rust
+```rust,ignore
 use wasmworker::webworker;
 
 let ww_sort = webworker!(sort_vec);
@@ -82,7 +83,7 @@ let ww_sort = webworker!(sort_vec);
 
 #### WebWorker
 We can instantiate our own workers and run functions on them:
-```rust
+```rust,ignore
 use wasmworker::{webworker, WebWorker};
 
 let worker = WebWorker::new(None).await;
@@ -95,7 +96,7 @@ Most of the time, we probably want to schedule tasks to a pool of workers, thoug
 The default worker pool is instantiated on first use and can be configured using `init_worker_pool()` as described above.
 It uses a round-robin scheduler (with the second option being a load based scheduler), a number of `navigator.hardwareConcurrency` separate workers, and the default inferred path.
 
-```rust
+```rust,ignore
 use wasmworker::{webworker, worker_pool};
 
 let worker_pool = worker_pool().await;
@@ -107,7 +108,7 @@ assert_eq!(res.0, vec![2, 5, 8]);
 Inspired by [Rayon](https://github.com/rayon-rs/rayon), this library also offers a (much simpler and less powerful) method for iterators.
 This functionality automatically parallelizes a map operation on the default worker pool.
 
-```rust
+```rust,ignore
 use wasmworker::iter_ext::IteratorExt;
 
 let some_vec = vec![
