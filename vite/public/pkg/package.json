@@ -1,0 +1,30 @@
+{
+  "name": "wasmworker-demo",
+  "type": "module",
+  "collaborators": [
+    "Pascal Berrang <rust@paberr.net>"
+  ],
+  "description": "Dispatching tasks to a WebWorker without `SharedArrayBuffers`.",
+  "version": "0.1.0",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paberr/wasmworker"
+  },
+  "files": [
+    "wasmworker_demo_bg.wasm",
+    "wasmworker_demo.js",
+    "wasmworker_demo.d.ts"
+  ],
+  "main": "wasmworker_demo.js",
+  "homepage": "https://github.com/paberr/wasmworker",
+  "types": "wasmworker_demo.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ],
+  "keywords": [
+    "webworker",
+    "parallelism",
+    "wasm"
+  ]
+}
