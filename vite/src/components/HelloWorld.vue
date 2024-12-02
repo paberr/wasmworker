@@ -1,17 +1,7 @@
 <script setup lang="ts">
+import { runWorker, runPool, runParMap } from 'wasmworker'
+
 defineProps<{ msg: string }>()
-
-function runWorker() {
-  window.runWorker()
-}
-
-function runPool() {
-  window.runPool()
-}
-
-function runParMap() {
-  window.runParMap()
-}
 </script>
 
 <template>

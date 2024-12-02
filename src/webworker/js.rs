@@ -18,7 +18,6 @@ console.debug('Initializing worker');
         return;
     }
 
-    await mod.default();
     self.postMessage({ success: true });
     console.debug('Worker started');
 
