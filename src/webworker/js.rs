@@ -1,5 +1,5 @@
 use js_sys::JsString;
-use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::{prelude::wasm_bindgen, UnwrapThrowExt};
 
 /// The initialization code for the worker,
 /// which will be loaded as a blob.
@@ -11,6 +11,7 @@ console.debug('Initializing worker');
 (async () => {
     let mod;
     try {
+        console.info('Importing {{wasm}}');
         mod = await import('{{wasm}}');
     } catch (e) {
         console.error('Unable to import module {{wasm}}', e);
@@ -44,12 +45,20 @@ console.debug('Initializing worker');
 
 /// This function normally returns the path of our wasm-bindgen glue file.
 /// It only works in module environments, though.
-pub(crate) fn main_js() -> JsString {
+pub(crate) fn main_js() -> String {
     #[wasm_bindgen]
     extern "C" {
         #[wasm_bindgen(thread_local, js_namespace = ["import", "meta"], js_name = url)]
         static URL: JsString;
     }
 
-    URL.with(Clone::clone)
+    let url = URL.with(Clone::clone);
+    let mut url = url.as_string().unwrap_throw();
+    // If compiled with `--target bundler`, this URL is the `_bg.js` file.
+    // The following wasm-bindgen specific logic strips away the `_bg`.
+    if url.ends_with("_bg.js") {
+        url.truncate(url.len() - 6);
+        url.push_str(".js");
+    }
+    url
 }
