@@ -105,29 +105,31 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly __webworker_sort_vec: (a: number, b: number, c: number) => void;
+  readonly __webworker_sort_vec: (a: number, b: number) => Array;
   readonly runWorker: () => number;
   readonly runPool: () => number;
   readonly runParMap: () => number;
-  readonly initWorkerPool: (a: number) => number;
   readonly __wbg_workerpooloptions_free: (a: number, b: number) => void;
-  readonly __wbg_get_workerpooloptions_path: (a: number, b: number) => void;
+  readonly __wbg_get_workerpooloptions_path: (a: number) => Array;
   readonly __wbg_set_workerpooloptions_path: (a: number, b: number, c: number) => void;
   readonly __wbg_get_workerpooloptions_strategy: (a: number) => number;
   readonly __wbg_set_workerpooloptions_strategy: (a: number, b: number) => void;
-  readonly __wbg_get_workerpooloptions_num_workers: (a: number, b: number) => void;
+  readonly __wbg_get_workerpooloptions_num_workers: (a: number) => Array;
   readonly __wbg_set_workerpooloptions_num_workers: (a: number, b: number, c: number) => void;
   readonly workerpooloptions_new: () => number;
+  readonly initWorkerPool: (a: number) => number;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export_2: WebAssembly.Table;
-  readonly _dyn_core__ops__function__FnMut__A____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hb3f0da974b301f4e: (a: number, b: number, c: number) => void;
-  readonly _dyn_core__ops__function__FnMut__A____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h1ed3f61ce670585a: (a: number, b: number, c: number) => void;
-  readonly _dyn_core__ops__function__FnMut__A____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h36e1010f860e4e87: (a: number, b: number, c: number) => void;
-  readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
+  readonly __wbindgen_export_3: WebAssembly.Table;
+  readonly closure36_externref_shim: (a: number, b: number, c: number) => void;
+  readonly closure76_externref_shim: (a: number, b: number, c: number) => void;
+  readonly closure86_externref_shim: (a: number, b: number, c: number) => void;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_exn_store: (a: number) => void;
-  readonly wasm_bindgen__convert__closures__invoke2_mut__h6d1a51fb0f116f48: (a: number, b: number, c: number, d: number) => void;
+  readonly __externref_table_alloc: () => number;
+  readonly closure103_externref_shim: (a: number, b: number, c: number, d: number) => void;
+  readonly __wbindgen_start: () => void;
 }
 
 export type SyncInitInput = BufferSource | WebAssembly.Module;

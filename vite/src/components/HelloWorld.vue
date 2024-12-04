@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { runWorker, runPool, runParMap } from "wasmworker";
+import {
+    initWorkerPool,
+    WorkerPoolOptions,
+    runWorker,
+    runPool,
+    runParMap,
+} from "wasmworker";
+
+let opts = new WorkerPoolOptions();
+opts.path = "http://localhost:8000/pkg/wasmworker_demo.js";
+initWorkerPool(opts);
 
 defineProps<{ msg: string }>();
 </script>
