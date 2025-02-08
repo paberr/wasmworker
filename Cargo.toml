@@ -16,7 +16,7 @@ wasmworker-proc-macro = { version = "0.1", path = "proc-macro" }
 
 [package]
 name = "wasmworker"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 description.workspace = true
