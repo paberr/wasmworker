@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use wasmworker::{iter_ext::IteratorExt, webworker, worker_pool, WebWorker};
+use wasmworker::{has_worker_pool, iter_ext::IteratorExt, webworker, worker_pool, WebWorker};
 use wasmworker_proc_macro::webworker_fn;
 
 use crate::js_assert_eq;
@@ -80,6 +80,30 @@ pub(crate) async fn can_use_iter_ext() {
     js_assert_eq!(res1, sorted_vec);
 
     // Test into_iter.
-    let res2 = vec.into_iter().par_map(webworker!(sort_vec)).await;
+    let res2 = vec.clone().into_iter().par_map(webworker!(sort_vec)).await;
     js_assert_eq!(res2, sorted_vec);
+
+    // Test into_iter with `try_par_map`.
+    let res2 = vec.into_iter().try_par_map(webworker!(sort_vec)).await;
+    js_assert_eq!(res2, sorted_vec);
+}
+
+pub(crate) async fn iter_ext_fallback_works() {
+    // Prepare input and output.
+    let vec = vec![
+        VecType(vec![8, 1, 5, 0, 4]),
+        VecType(vec![8, 2, 5, 0, 4]),
+        VecType(vec![8, 1, 7, 0, 4]),
+    ];
+    let mut sorted_vec = vec.clone();
+    for sub_vec in sorted_vec.iter_mut() {
+        sub_vec.0.sort();
+    }
+
+    // Test into_iter.
+    let res2 = vec.into_iter().try_par_map(webworker!(sort_vec)).await;
+    js_assert_eq!(res2, sorted_vec);
+
+    // Check there is no worker pool initialized.
+    js_assert_eq!(has_worker_pool(), false);
 }

@@ -22,6 +22,8 @@ macro_rules! js_assert_eq {
 
 #[wasm_bindgen(js_name = runTests)]
 pub async fn run_tests() {
+    // The fallback test needs to run first.
+    iter_ext_fallback_works().await;
     can_handle_invalid_paths().await;
     can_run_task_bytes().await;
     can_limit_tasks_bytes().await;

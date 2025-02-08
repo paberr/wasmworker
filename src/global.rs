@@ -56,3 +56,8 @@ pub async fn worker_pool() -> &'static WebWorkerPool {
         })
         .await
 }
+
+/// This function checks if the worker pool has been initialized.
+pub fn has_worker_pool() -> bool {
+    WORKER_POOL.initialized()
+}

@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 #![allow(clippy::borrowed_box)]
-pub use global::{init_worker_pool, worker_pool};
+pub use global::{has_worker_pool, init_worker_pool, worker_pool};
 pub use pool::WorkerPoolOptions;
 pub use webworker::WebWorker;
 
