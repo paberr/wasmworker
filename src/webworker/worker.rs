@@ -46,8 +46,8 @@ pub struct WebWorker {
     /// A map between task ids and the channel they need to be sent out with.
     /// [Response]s will arrive on our callback and we redistribute them to their origin.
     open_tasks: Arc<Mutex<HashMap<usize, oneshot::Sender<Response>>>>,
-    /// The callback handle for the worker.
-    _callback: Closure<Callback>,
+    // The callback handle for the worker.
+    // _callback: Closure<Callback>,
 }
 
 impl WebWorker {
@@ -111,6 +111,7 @@ impl WebWorker {
             let _ = tx.send(post_init);
         });
         worker.set_onmessage(Some(handler.as_ref().unchecked_ref()));
+        handler.forget();
         let post_init = rx.await.expect_throw("WebWorker init sender dropped");
 
         // Handle errors in webworker init
@@ -126,13 +127,14 @@ impl WebWorker {
 
         let callback_handle = Self::callback(Arc::clone(&tasks));
         worker.set_onmessage(Some(callback_handle.as_ref().unchecked_ref()));
+        callback_handle.forget();
 
         Ok(WebWorker {
             worker,
             task_limit: task_limit.map(|limit| Semaphore::new(limit)),
             current_task: AtomicUsize::new(0),
             open_tasks: tasks,
-            _callback: callback_handle,
+            // _callback: callback_handle,
         })
     }
 
