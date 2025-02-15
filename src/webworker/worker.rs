@@ -1,12 +1,15 @@
 use std::{
-    cell::{Cell, RefCell},
     collections::HashMap,
-    rc::Rc,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 use super::com::*;
 use super::js::*;
 use js_sys::Array;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{oneshot, Semaphore};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue, UnwrapThrowExt};
@@ -39,10 +42,10 @@ pub struct WebWorker {
     /// An optional limit on the number of tasks queued at the same time.
     task_limit: Option<Semaphore>,
     /// The current task id, which is used to reidentify responses.
-    current_task: Cell<usize>,
+    current_task: AtomicUsize,
     /// A map between task ids and the channel they need to be sent out with.
     /// [Response]s will arrive on our callback and we redistribute them to their origin.
-    open_tasks: Rc<RefCell<HashMap<usize, oneshot::Sender<Response>>>>,
+    open_tasks: Arc<Mutex<HashMap<usize, oneshot::Sender<Response>>>>,
     /// The callback handle for the worker.
     _callback: Closure<Callback>,
 }
@@ -119,15 +122,15 @@ impl WebWorker {
             ));
         }
 
-        let tasks = Rc::new(RefCell::new(HashMap::new()));
+        let tasks = Arc::new(Mutex::new(HashMap::new()));
 
-        let callback_handle = Self::callback(Rc::clone(&tasks));
+        let callback_handle = Self::callback(Arc::clone(&tasks));
         worker.set_onmessage(Some(callback_handle.as_ref().unchecked_ref()));
 
         Ok(WebWorker {
             worker,
             task_limit: task_limit.map(|limit| Semaphore::new(limit)),
-            current_task: Cell::new(0),
+            current_task: AtomicUsize::new(0),
             open_tasks: tasks,
             _callback: callback_handle,
         })
@@ -135,13 +138,13 @@ impl WebWorker {
 
     /// Function to be called when a result is ready.
     fn callback(
-        tasks: Rc<RefCell<HashMap<usize, oneshot::Sender<Response>>>>,
+        tasks: Arc<Mutex<HashMap<usize, oneshot::Sender<Response>>>>,
     ) -> Closure<dyn FnMut(MessageEvent)> {
         Closure::new(move |event: MessageEvent| {
             let data = event.data();
             let response: Response =
                 serde_wasm_bindgen::from_value(data).expect_throw("Could not deserialize response");
-            let mut tasks_wg = tasks.borrow_mut();
+            let mut tasks_wg = tasks.lock();
 
             // Send response on channel.
             if let Some(channel) = tasks_wg.remove(&response.id) {
@@ -289,8 +292,7 @@ impl WebWorker {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        let id = self.current_task.get();
-        self.current_task.set(id.wrapping_add(1));
+        let id = self.current_task.fetch_add(1, Ordering::SeqCst);
         let request = Request {
             id,
             func_name,
@@ -299,7 +301,7 @@ impl WebWorker {
 
         // Create channel and add task.
         let (sender, receiver) = oneshot::channel();
-        self.open_tasks.borrow_mut().insert(id, sender);
+        self.open_tasks.lock().insert(id, sender);
 
         self.worker
             .post_message(
@@ -323,7 +325,7 @@ impl WebWorker {
 
     /// Return the number of tasks currently queued to this worker.
     pub fn current_load(&self) -> usize {
-        self.open_tasks.borrow().len()
+        self.open_tasks.lock().len()
     }
 }
 

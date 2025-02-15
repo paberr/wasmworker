@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use wasm_bindgen::{prelude::wasm_bindgen, UnwrapThrowExt};
 
@@ -33,7 +33,7 @@ pub(super) struct Scheduler {
     strategy: Strategy,
     /// The currently chosen worker.
     /// This state is only relevant for the round-robin strategy.
-    current_worker: Cell<usize>,
+    current_worker: AtomicUsize,
 }
 
 impl Scheduler {
@@ -41,7 +41,7 @@ impl Scheduler {
     pub(super) fn new(strategy: Strategy) -> Self {
         Self {
             strategy,
-            current_worker: Cell::new(0),
+            current_worker: AtomicUsize::new(0),
         }
     }
 
@@ -51,10 +51,8 @@ impl Scheduler {
         match self.strategy {
             Strategy::RoundRobin => {
                 // Simply return the current worker and increment.
-                let worker_id = self.current_worker.get();
-                self.current_worker
-                    .set((worker_id + 1) % pool.num_workers());
-                worker_id
+                let prev = self.current_worker.fetch_add(1, Ordering::Relaxed);
+                prev % pool.num_workers()
             }
             Strategy::LoadBased => {
                 // Choose the worker with the minimum work load.
