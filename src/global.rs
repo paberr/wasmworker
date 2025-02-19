@@ -30,6 +30,8 @@ static WORKER_POOL: OnceCell<SendWrapper<WebWorkerPool>> = OnceCell::const_new()
 #[wasm_bindgen(js_name = initWorkerPool)]
 pub async fn init_worker_pool(options: WorkerPoolOptions) {
     WORKER_POOL
+        // should call `set` instead to correctly error when it has already been initialized.
+        // otherwise options would get silently ignored.
         .get_or_init(|| async move {
             SendWrapper::new(
                 WebWorkerPool::with_options(options)

@@ -41,7 +41,7 @@ pub struct WebWorker {
     /// The current task id, which is used to reidentify responses.
     current_task: Cell<usize>,
     /// A map between task ids and the channel they need to be sent out with.
-    /// [Response]s will arrive on our callback and we redistribute them to their origin.
+    /// [`Response`]s will arrive on our callback and we redistribute them to their origin.
     open_tasks: Rc<RefCell<HashMap<usize, oneshot::Sender<Response>>>>,
     /// The callback handle for the worker.
     _callback: Closure<Callback>,
@@ -296,6 +296,10 @@ impl WebWorker {
             func_name,
             arg: to_bytes(arg),
         };
+        // could probably extract everything from here into another function,
+        // to pay less monomorphisation cost, less code that needs to be
+        // duplicated for each set of argument types that the function is
+        // called with.
 
         // Create channel and add task.
         let (sender, receiver) = oneshot::channel();
@@ -313,6 +317,7 @@ impl WebWorker {
             .expect_throw("WebWorker gone")
             .response
             .expect_throw("Could not find function");
+        // until here
         from_bytes(&res)
     }
 

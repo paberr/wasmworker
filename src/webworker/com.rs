@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 /// It also indicates if errors occurred during the import.
 #[derive(Deserialize)]
 pub(super) struct PostInit {
+    // could remove the `success` boolean because it's entirely captured by the
+    // `message` field -- maybe rename it to `error`.
     /// `true` if initialization is complete, and `false` if import errors occurred.
     pub(crate) success: bool,
     /// The `message` is only set if `success` is false.
@@ -18,6 +20,7 @@ pub(super) struct PostInit {
 pub(super) struct Request {
     /// This is the internal task id, which is used to match a [`Response`]
     /// to the corresponding task.
+    // should probably be u32 or u64, doesn't depend on the bit width
     pub(crate) id: usize,
     /// The name of the function to be executed by the worker.
     pub(crate) func_name: &'static str,
@@ -32,6 +35,7 @@ pub(super) struct Request {
 #[derive(Serialize, Deserialize)]
 pub(super) struct Response {
     /// The corresponding task id, matching the original id from the [`Request`] object.
+    // same here
     pub(crate) id: usize,
     /// The response, which should only be `None` if the function could not be found.
     /// This should never be the case if the [`crate::func::WebWorkerFn`] was constructed

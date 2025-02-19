@@ -20,6 +20,7 @@ mod scheduler;
 /// ```
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Default, Clone)]
+#[non_exhaustive]
 pub struct WorkerPoolOptions {
     /// The path to the wasm-bindgen glue. By default, this path is inferred.
     /// [`crate::WebWorker::with_path`] lists more details on when this path
@@ -153,6 +154,8 @@ impl WebWorkerPool {
     /// ```ignore
     /// worker_pool().await.run(webworker!(sort_vec), &my_vec).await
     /// ```
+    // serde feature seems superfluous as it doesn't disable any dependencies.
+    // suggestion: remove the serde feature, but keep the same functions.
     #[cfg(feature = "serde")]
     pub async fn run<T, R>(&self, func: WebWorkerFn<T, R>, arg: &T) -> R
     where

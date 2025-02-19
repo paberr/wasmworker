@@ -1,3 +1,4 @@
+// reviewed
 #![doc = include_str!("../README.md")]
 #![allow(clippy::borrowed_box)]
 pub use global::{has_worker_pool, init_worker_pool, worker_pool};

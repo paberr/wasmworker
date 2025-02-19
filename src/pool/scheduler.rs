@@ -12,6 +12,7 @@ use super::WebWorkerPool;
 /// ```rust
 /// pub use wasmworker::pool::Strategy;
 /// ```
+#[non_exhaustive] // forward compatibility
 #[wasm_bindgen]
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub enum Strategy {
