@@ -52,7 +52,7 @@ impl WebWorker {
     /// This function takes the [`WORKER_JS`] and creates the corresponding
     /// worker blob after inserting the given path.
     /// If no `wasm_path` is provided, the [`main_js()`] path is used.
-    fn worker_blob(wasm_path: Option<&str>) -> String {
+    fn worker_blob(wasm_path: Option<&str>, wasm_bg_path: Option<&str>) -> String {
         let blob_options = BlobPropertyBag::new();
         blob_options.set_type("application/javascript");
 
@@ -63,9 +63,16 @@ impl WebWorker {
             wasm_path_owned.as_ref().unwrap_throw()
         });
 
+        let wasm_bg_path = match wasm_bg_path {
+            Some(path) => format!("{{module_or_path: '{path}'}}"),
+            None => String::new(),
+        };
+
         let code = Array::new();
         code.push(&JsValue::from_str(
-            &WORKER_JS.replace("{{wasm}}", wasm_path),
+            &WORKER_JS
+                .replace("{{wasm}}", wasm_path)
+                .replace("{{wasm_bg}}", &wasm_bg_path),
         ));
 
         Url::create_object_url_with_blob(
@@ -79,7 +86,7 @@ impl WebWorker {
     /// This can fail with an [`InitError`], for example, if the automatically inferred
     /// path for the wasm-bindgen glue is wrong.
     pub async fn new(task_limit: Option<usize>) -> Result<WebWorker, InitError> {
-        Self::with_path(None, task_limit).await
+        Self::with_path(None, None, task_limit).await
     }
 
     /// Create a new [`WebWorker`] with an optional limit on the number of tasks queued.
@@ -91,12 +98,14 @@ impl WebWorker {
     /// If a wrong path is given, a [`InitError`] will be returned.
     pub async fn with_path(
         main_js: Option<&str>,
+        main_bg_js: Option<&str>,
         task_limit: Option<usize>,
     ) -> Result<WebWorker, InitError> {
         // Create worker
         let worker_options = WorkerOptions::new();
         worker_options.set_type(WorkerType::Module);
-        let script_url = WebWorker::worker_blob(main_js);
+        let script_url = WebWorker::worker_blob(main_js, main_bg_js);
+
         let worker = Worker::new_with_options(&script_url, &worker_options)
             .map_err(InitError::WebWorkerCreation)?;
 
