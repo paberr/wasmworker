@@ -26,6 +26,7 @@ pub struct WorkerPoolOptions {
     /// [`crate::WebWorker::with_path`] lists more details on when this path
     /// should be manually configured.
     pub path: Option<String>,
+    pub path_bg: Option<String>,
     /// The strategy to be used by the worker pool.
     pub strategy: Option<Strategy>,
     /// The number of workers that will be spawned. This defaults to `navigator.hardwareConcurrency`.
@@ -45,6 +46,10 @@ impl WorkerPoolOptions {
     /// Returns the path to be used.
     fn path(&self) -> Option<&str> {
         self.path.as_deref()
+    }
+
+    fn path_bg(&self) -> Option<&str> {
+        self.path_bg.as_deref()
     }
 
     /// Returns the configured strategy or the default strategy.
@@ -132,7 +137,7 @@ impl WebWorkerPool {
     pub async fn with_options(options: WorkerPoolOptions) -> Result<Self, InitError> {
         let worker_inits = (0..options.num_workers()).map(|_| {
             // Do not impose a task limit.
-            WebWorker::with_path(options.path(), None)
+            WebWorker::with_path(options.path(), options.path_bg(), None)
         });
         let workers = join_all(worker_inits).await;
         let workers = workers.into_iter().collect::<Result<Vec<_>, _>>()?;

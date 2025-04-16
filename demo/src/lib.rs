@@ -23,7 +23,7 @@ async fn worker() -> &'static WebWorker {
     WORKER
         .get_or_init(move || async {
             SendWrapper::new(
-                WebWorker::with_path(None, None)
+                WebWorker::with_path(None, None, None)
                     .await
                     .expect_throw("Couldn't instantiate WebWorker"),
             )

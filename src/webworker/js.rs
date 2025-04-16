@@ -18,7 +18,7 @@ console.debug('Initializing worker');
         return;
     }
 
-    await mod.default();
+    await mod.default({{wasm_bg}});
     self.postMessage({ success: true });
     console.debug('Worker started');
 

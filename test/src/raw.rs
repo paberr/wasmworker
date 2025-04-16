@@ -11,7 +11,7 @@ pub fn sort(mut v: Box<[u8]>) -> Box<[u8]> {
 }
 
 pub(crate) async fn can_handle_invalid_paths() {
-    let worker = WebWorker::with_path(Some("something"), None).await;
+    let worker = WebWorker::with_path(Some("something"), None, None).await;
     if !matches!(worker, Err(InitError::WebWorkerModuleLoading(_))) {
         throw_str("Should have failed initialization with wrong path");
     }
