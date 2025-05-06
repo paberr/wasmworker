@@ -32,7 +32,7 @@ where
         R: Serialize + for<'de> Deserialize<'de>,
     {
         let pool = worker_pool().await;
-        join_all(self.map(|arg| pool.run_internal(func, arg))).await
+        join_all(self.map(|arg| pool.run_internal(func, arg, None))).await
     }
 
     /// The `try_par_map` function will attempt to parallelize a map operation on the default
@@ -59,7 +59,8 @@ where
         if has_worker_pool() {
             self.par_map(func).await
         } else {
-            self.map(|item| (func.func)(item.into())).collect()
+            self.map(|item| futures::executor::block_on((func.func)(item.into(), None)))
+                .collect()
         }
     }
 }

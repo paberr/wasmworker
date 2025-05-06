@@ -5,7 +5,7 @@ use js_sys::wasm_bindgen::{prelude::wasm_bindgen, UnwrapThrowExt};
 use scheduler::Scheduler;
 pub use scheduler::Strategy;
 use serde::{Deserialize, Serialize};
-use web_sys::window;
+use web_sys::{window, MessagePort};
 
 use crate::{error::InitError, func::WebWorkerFn, WebWorker};
 
@@ -164,7 +164,21 @@ impl WebWorkerPool {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.run_internal(func, arg).await
+        self.run_internal(func, arg, None).await
+    }
+
+    #[cfg(feature = "serde")]
+    pub async fn run_with_channel<T, R>(
+        &self,
+        func: WebWorkerFn<T, R>,
+        arg: &T,
+        port: MessagePort,
+    ) -> R
+    where
+        T: Serialize + for<'de> Deserialize<'de>,
+        R: Serialize + for<'de> Deserialize<'de>,
+    {
+        self.run_internal(func, arg, Some(port)).await
     }
 
     /// This function can outsource a task on a [`WebWorkerPool`] which has `Box<[u8]>` both as input and output.
@@ -183,12 +197,17 @@ impl WebWorkerPool {
         func: WebWorkerFn<Box<[u8]>, Box<[u8]>>,
         arg: &Box<[u8]>,
     ) -> Box<[u8]> {
-        self.run_internal(func, arg).await
+        self.run_internal(func, arg, None).await
     }
 
     /// Determines the worker to run the task on using the scheduler
     /// and runs the task.
-    pub(crate) async fn run_internal<T, R, A>(&self, func: WebWorkerFn<T, R>, arg: A) -> R
+    pub(crate) async fn run_internal<T, R, A>(
+        &self,
+        func: WebWorkerFn<T, R>,
+        arg: A,
+        port: Option<MessagePort>,
+    ) -> R
     where
         A: Borrow<T>,
         T: Serialize + for<'de> Deserialize<'de>,
@@ -196,7 +215,7 @@ impl WebWorkerPool {
     {
         let worker_id = self.scheduler.schedule(self);
         self.workers[worker_id]
-            .run_internal(func, arg.borrow())
+            .run_internal(func, arg.borrow(), port)
             .await
     }
 

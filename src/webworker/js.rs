@@ -34,7 +34,7 @@ console.debug('Initializing worker');
             return;
         }
 
-        const worker_result = await fn(arg);
+        const worker_result = await fn(arg, event.ports[0]);
 
         // Send response back to be handled by callback in main thread.
         console.debug('Send worker result');

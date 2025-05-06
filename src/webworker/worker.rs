@@ -11,7 +11,9 @@ use js_sys::Array;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{oneshot, Semaphore};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue, UnwrapThrowExt};
-use web_sys::{Blob, BlobPropertyBag, MessageEvent, Url, Worker, WorkerOptions, WorkerType};
+use web_sys::{
+    Blob, BlobPropertyBag, MessageEvent, MessagePort, Url, Worker, WorkerOptions, WorkerType,
+};
 
 use crate::{
     convert::{from_bytes, to_bytes},
@@ -180,7 +182,21 @@ impl WebWorker {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.run_internal(func, arg).await
+        self.run_internal(func, arg, None).await
+    }
+
+    #[cfg(feature = "serde")]
+    pub async fn run_with_channel<T, R>(
+        &self,
+        func: WebWorkerFn<T, R>,
+        arg: &T,
+        port: MessagePort,
+    ) -> R
+    where
+        T: Serialize + for<'de> Deserialize<'de>,
+        R: Serialize + for<'de> Deserialize<'de>,
+    {
+        self.run_internal(func, arg, Some(port)).await
     }
 
     /// This function differs from [`WebWorker::run`] by returning early if the given task limit is reached.
@@ -200,7 +216,7 @@ impl WebWorker {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.try_run_internal(func, arg).await
+        self.try_run_internal(func, arg, None).await
     }
 
     /// This function can outsource a task on a [`WebWorker`] which has `Box<[u8]>` both as input and output.
@@ -222,7 +238,7 @@ impl WebWorker {
         func: WebWorkerFn<Box<[u8]>, Box<[u8]>>,
         arg: &Box<[u8]>,
     ) -> Box<[u8]> {
-        self.run_internal(func, arg).await
+        self.run_internal(func, arg, None).await
     }
 
     /// This function differs from [`WebWorker::run_bytes`] by returning early if the given task limit is reached.
@@ -244,7 +260,7 @@ impl WebWorker {
         func: WebWorkerFn<Box<[u8]>, Box<[u8]>>,
         arg: &Box<[u8]>,
     ) -> Result<Box<[u8]>, Full> {
-        self.try_run_internal(func, arg).await
+        self.try_run_internal(func, arg, None).await
     }
 
     /// Internal function to schedule a task to the worker.
@@ -253,6 +269,7 @@ impl WebWorker {
         &self,
         func: WebWorkerFn<T, R>,
         arg: &T,
+        port: Option<MessagePort>,
     ) -> Result<R, Full>
     where
         T: Serialize + for<'de> Deserialize<'de>,
@@ -269,11 +286,16 @@ impl WebWorker {
         };
 
         // Convert arg and result.
-        Ok(self.force_run(func.name, arg).await)
+        Ok(self.force_run(func.name, arg, port).await)
     }
 
     /// Internal function to schedule a task to the worker.
-    pub(crate) async fn run_internal<T, R>(&self, func: WebWorkerFn<T, R>, arg: &T) -> R
+    pub(crate) async fn run_internal<T, R>(
+        &self,
+        func: WebWorkerFn<T, R>,
+        arg: &T,
+        port: Option<MessagePort>,
+    ) -> R
     where
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
@@ -286,13 +308,18 @@ impl WebWorker {
         };
 
         // Convert arg and result.
-        self.force_run(func.name, arg).await
+        self.force_run(func.name, arg, port).await
     }
 
     /// This function handles the communication with the worker
     /// after the task limit has been checked.
     /// It also handles (de)serialization.
-    async fn force_run<T, R>(&self, func_name: &'static str, arg: &T) -> R
+    async fn force_run<T, R>(
+        &self,
+        func_name: &'static str,
+        arg: &T,
+        port: Option<MessagePort>,
+    ) -> R
     where
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
@@ -315,11 +342,26 @@ impl WebWorker {
         let (sender, receiver) = oneshot::channel();
         self.open_tasks.borrow_mut().insert(id, sender);
 
-        self.worker
-            .post_message(
-                &serde_wasm_bindgen::to_value(&request).expect_throw("Could not serialize request"),
-            )
-            .expect_throw("WebWorker gone");
+        // send the task to the webworker, either with a port or without one
+        if let Some(port) = port {
+            let transfer = Array::new();
+            transfer.push(&port);
+
+            self.worker
+                .post_message_with_transfer(
+                    &serde_wasm_bindgen::to_value(&request)
+                        .expect_throw("Could not serialize request"),
+                    &transfer,
+                )
+                .expect_throw("WebWorker gone");
+        } else {
+            self.worker
+                .post_message(
+                    &serde_wasm_bindgen::to_value(&request)
+                        .expect_throw("Could not serialize request"),
+                )
+                .expect_throw("WebWorker gone");
+        }
 
         // Handle result.
         receiver
