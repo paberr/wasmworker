@@ -55,6 +55,7 @@ features = [
     "Navigator",
     "MessagePort",
     "MessageChannel",
+    "Response",
 ]
 version = "0.3"
 

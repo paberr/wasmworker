@@ -54,7 +54,11 @@ impl WebWorker {
     /// This function takes the [`WORKER_JS`] and creates the corresponding
     /// worker blob after inserting the given path.
     /// If no `wasm_path` is provided, the [`main_js()`] path is used.
-    fn worker_blob(wasm_path: Option<&str>, wasm_bg_path: Option<&str>) -> String {
+    fn worker_blob(
+        wasm_path: Option<&str>,
+        wasm_bg_path: Option<&str>,
+        has_precompiled_module: bool,
+    ) -> String {
         let blob_options = BlobPropertyBag::new();
         blob_options.set_type("application/javascript");
 
@@ -67,12 +71,18 @@ impl WebWorker {
 
         let wasm_bg_path = match wasm_bg_path {
             Some(path) => format!("{{module_or_path: '{path}'}}"),
-            None => String::new(),
+            None => "undefined".to_string(),
+        };
+
+        let worker_js = if has_precompiled_module {
+            super::js::WORKER_JS_WITH_PRECOMPILED
+        } else {
+            super::js::WORKER_JS
         };
 
         let code = Array::new();
         code.push(&JsValue::from_str(
-            &WORKER_JS
+            &worker_js
                 .replace("{{wasm}}", wasm_path)
                 .replace("{{wasm_bg}}", &wasm_bg_path),
         ));
@@ -103,13 +113,41 @@ impl WebWorker {
         main_bg_js: Option<&str>,
         task_limit: Option<usize>,
     ) -> Result<WebWorker, InitError> {
+        Self::with_path_and_module(main_js, main_bg_js, task_limit, None).await
+    }
+
+    /// Create a new [`WebWorker`] with an optional limit on the number of tasks queued
+    /// and an optional pre-compiled WASM module.
+    pub async fn with_path_and_module(
+        main_js: Option<&str>,
+        main_bg_js: Option<&str>,
+        task_limit: Option<usize>,
+        wasm_module: Option<js_sys::WebAssembly::Module>,
+    ) -> Result<WebWorker, InitError> {
         // Create worker
         let worker_options = WorkerOptions::new();
         worker_options.set_type(WorkerType::Module);
-        let script_url = WebWorker::worker_blob(main_js, main_bg_js);
+        let script_url = WebWorker::worker_blob(main_js, main_bg_js, wasm_module.is_some());
 
         let worker = Worker::new_with_options(&script_url, &worker_options)
             .map_err(InitError::WebWorkerCreation)?;
+
+        // Send pre-compiled WASM module if provided
+        if let Some(module) = wasm_module {
+            let init_msg = js_sys::Object::new();
+            js_sys::Reflect::set(
+                &init_msg,
+                &JsValue::from_str("type"),
+                &JsValue::from_str("wasm_module"),
+            )
+            .expect_throw("Could not set type");
+            js_sys::Reflect::set(&init_msg, &JsValue::from_str("module"), &module)
+                .expect_throw("Could not set module");
+
+            worker
+                .post_message(&init_msg)
+                .expect_throw("Could not send WASM module to worker");
+        }
 
         // Wait until worker is initialized.
         let (tx, rx) = oneshot::channel();
