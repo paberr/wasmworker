@@ -1,5 +1,5 @@
 pub use worker::*;
 
 mod com;
-mod js;
+pub mod js;
 mod worker;

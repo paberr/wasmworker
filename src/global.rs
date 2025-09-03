@@ -56,6 +56,23 @@ pub async fn init_worker_pool(options: WorkerPoolOptions) -> Result<(), AlreadyI
     WORKER_POOL.set(pool).map_err(|_| AlreadyInitialized)
 }
 
+/// JavaScript-accessible function to initialize an optimized worker pool globally.
+/// This creates a worker pool that precompiles and shares WASM across all workers
+/// for optimal bandwidth usage.
+///
+/// ```js
+/// import init, { initOptimizedWorkerPool } from "./pkg/webapp.js";
+///
+/// await init();
+/// await initOptimizedWorkerPool();
+/// ```
+#[wasm_bindgen(js_name = initOptimizedWorkerPool)]
+pub async fn init_optimized_worker_pool() {
+    let mut options = WorkerPoolOptions::default();
+    options.precompile_wasm = Some(true);
+    init_worker_pool(options).await;
+}
+
 /// This function accesses the default worker pool.
 /// If [`init_worker_pool`] has not been manually called,
 /// this function will initialize the worker pool prior to returning it.
@@ -65,7 +82,7 @@ pub async fn worker_pool() -> &'static WebWorkerPool {
     WORKER_POOL
         .get_or_init(|| async {
             SendWrapper::new(
-                WebWorkerPool::new()
+                WebWorkerPool::with_options(WorkerPoolOptions::default())
                     .await
                     .expect_throw("Couldn't instantiate worker pool"),
             )

@@ -54,3 +54,59 @@ pub(crate) fn main_js() -> JsString {
 
     URL.with(Clone::clone)
 }
+
+/// The initialization code for workers that receive a pre-compiled WASM module
+pub(crate) const WORKER_JS_WITH_PRECOMPILED: &str = r#"
+console.debug('Initializing worker with pre-compiled WASM');
+
+let wasmModule = null;
+let mod = null;
+let initHandler = null;
+
+// Listen for the pre-compiled WASM module
+initHandler = async function(event) {
+    const data = event.data;
+
+    if (data.type === 'wasm_module') {
+        console.debug('Received pre-compiled WASM module');
+        wasmModule = data.module;
+
+        // Now initialize with the pre-compiled module
+        try {
+            mod = await import('{{wasm}}');
+            await mod.default({ module_or_path: wasmModule });
+            self.postMessage({ success: true });
+            console.debug('Worker started with pre-compiled WASM');
+        } catch (e) {
+            console.error('Unable to initialize with pre-compiled WASM', e);
+            self.postMessage({ success: false, message: e.toString() });
+            return;
+        }
+
+        // Remove this listener and add the task handler
+        self.removeEventListener('message', initHandler);
+
+        // Add the main message handler for tasks
+        self.addEventListener('message', async event => {
+            console.debug('Received worker event');
+            const { id, func_name, arg } = event.data;
+
+            const webworker_func_name = `__webworker_${func_name}`;
+            const fn = mod[webworker_func_name];
+            if (!fn) {
+                console.error(`Function '${func_name}' is not exported.`);
+                self.postMessage({ id: id, response: null });
+                return;
+            }
+
+            const worker_result = await fn(arg, event.ports[0]);
+
+            // Send response back to be handled by callback in main thread.
+            console.debug('Send worker result');
+            self.postMessage({ id: id, response: worker_result });
+        });
+    }
+};
+
+self.addEventListener('message', initHandler);
+"#;
