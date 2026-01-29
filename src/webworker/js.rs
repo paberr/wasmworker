@@ -37,6 +37,15 @@ console.debug('Initializing worker');
 
         const worker_result = await fn(arg, event.ports[0]);
 
+        // For channel tasks, yield the event loop before posting the result.
+        // Channel messages (sent via MessagePort.postMessage during execution)
+        // and the task result (sent via self.postMessage) travel on independent
+        // message paths. Without this yield, the main thread may receive the
+        // result before all channel messages have been delivered.
+        if (is_channel) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
         // Send response back to be handled by callback in main thread.
         console.debug('Send worker result');
         self.postMessage({ id: id, response: worker_result });
@@ -102,6 +111,12 @@ initHandler = async function(event) {
             }
 
             const worker_result = await fn(arg, event.ports[0]);
+
+            // For channel tasks, yield the event loop before posting the result.
+            // See comment in WORKER_JS for rationale.
+            if (is_channel) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
 
             // Send response back to be handled by callback in main thread.
             console.debug('Send worker result');
