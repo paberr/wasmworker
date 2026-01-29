@@ -12,10 +12,13 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{oneshot, Semaphore};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue, UnwrapThrowExt};
 use web_sys::{
-    Blob, BlobPropertyBag, MessageEvent, MessagePort, Url, Worker, WorkerOptions, WorkerType,
+    Blob, BlobPropertyBag, MessageChannel, MessageEvent, MessagePort, Url, Worker, WorkerOptions,
+    WorkerType,
 };
 
 use crate::{
+    channel::Channel,
+    channel_task::ChannelTask,
     convert::{from_bytes, to_bytes},
     error::{Full, InitError},
     func::{WebWorkerChannelFn, WebWorkerFn},
@@ -234,6 +237,10 @@ impl WebWorker {
 
     /// Run an async function with bidirectional channel support on this [`WebWorker`].
     ///
+    /// Returns a [`ChannelTask`] that provides both the communication channel and the
+    /// task result. The `MessageChannel` is created internally — callers interact only
+    /// through the returned `ChannelTask`.
+    ///
     /// The `func`: [`WebWorkerChannelFn`] argument should normally be instantiated using the
     /// [`crate::webworker_channel!`] macro. This ensures type safety and that the function
     /// is correctly exposed to the worker.
@@ -242,19 +249,20 @@ impl WebWorker {
     ///
     /// Example:
     /// ```ignore
-    /// worker.run_channel(webworker_channel!(process_with_progress), &my_data, port).await
+    /// let task = worker
+    ///     .run_channel(webworker_channel!(process_with_progress), &data)
+    ///     .await;
+    ///
+    /// let progress: Progress = task.recv().await.expect("progress");
+    /// task.send(&Continue { should_continue: true });
+    /// let result: ProcessResult = task.result().await;
     /// ```
-    pub async fn run_channel<T, R>(
-        &self,
-        func: WebWorkerChannelFn<T, R>,
-        arg: &T,
-        port: MessagePort,
-    ) -> R
+    pub async fn run_channel<T, R>(&self, func: WebWorkerChannelFn<T, R>, arg: &T) -> ChannelTask<R>
     where
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.run_channel_internal(func, arg, port).await
+        self.run_channel_internal(func, arg).await
     }
 
     /// This function differs from [`WebWorker::run`] by returning early if the given task limit is reached.
@@ -364,12 +372,13 @@ impl WebWorker {
     }
 
     /// Internal function to schedule a channel task to the worker.
+    /// Creates a `MessageChannel` internally, sends one port to the worker,
+    /// and returns a `ChannelTask` wrapping the other port and the result future.
     pub(crate) async fn run_channel_internal<T, R>(
         &self,
         func: WebWorkerChannelFn<T, R>,
         arg: &T,
-        port: MessagePort,
-    ) -> R
+    ) -> ChannelTask<R>
     where
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
@@ -381,8 +390,15 @@ impl WebWorker {
             None
         };
 
-        // Convert arg and result.
-        self.force_run(func.name, arg, true, Some(port)).await
+        // Create the MessageChannel internally.
+        let msg_channel = MessageChannel::new().expect_throw("Could not create MessageChannel");
+        let channel = Channel::from(msg_channel.port1());
+        let worker_port = msg_channel.port2();
+
+        // Send the request and get a receiver for the result bytes.
+        let result_rx = self.send_channel_request(func.name, arg, worker_port);
+
+        ChannelTask::new(channel, result_rx)
     }
 
     /// This function handles the communication with the worker
@@ -445,6 +461,50 @@ impl WebWorker {
             .expect_throw("WebWorker gone")
             .response
             .expect_throw("Could not find function")
+    }
+
+    /// Sends a channel request to the worker and returns a receiver for the result bytes.
+    /// Unlike `send_request`, this does not await the result — it returns immediately
+    /// so the caller can interact with the channel before consuming the result.
+    fn send_channel_request<T>(
+        &self,
+        func_name: &'static str,
+        arg: &T,
+        port: MessagePort,
+    ) -> oneshot::Receiver<Vec<u8>>
+    where
+        T: Serialize + for<'de> Deserialize<'de>,
+    {
+        let id = self.current_task.fetch_add(1, Ordering::Relaxed);
+        let request = Request {
+            id,
+            func_name,
+            is_channel: true,
+            arg: to_bytes(arg),
+        };
+
+        let (sender, receiver) = oneshot::channel();
+        self.open_tasks.borrow_mut().insert(id, sender);
+
+        let transfer = Array::new();
+        transfer.push(&port);
+
+        self.worker
+            .post_message_with_transfer(
+                &serde_wasm_bindgen::to_value(&request).expect_throw("Could not serialize request"),
+                &transfer,
+            )
+            .expect_throw("WebWorker gone");
+
+        // Map the receiver to extract just the response bytes.
+        let (byte_sender, byte_receiver) = oneshot::channel();
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Ok(response) = receiver.await {
+                let _ = byte_sender.send(response.response.expect("Could not find function"));
+            }
+        });
+
+        byte_receiver
     }
 
     /// Return the current capacity for new tasks.

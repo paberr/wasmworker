@@ -7,9 +7,10 @@ pub use scheduler::Strategy;
 use serde::{Deserialize, Serialize};
 
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{window, MessagePort};
+use web_sys::window;
 
 use crate::{
+    channel_task::ChannelTask,
     error::InitError,
     func::{WebWorkerChannelFn, WebWorkerFn},
     WebWorker,
@@ -211,25 +212,29 @@ impl WebWorkerPool {
 
     /// Run an async function with bidirectional channel support on this [`WebWorkerPool`].
     ///
+    /// Returns a [`ChannelTask`] that provides both the communication channel and the
+    /// task result. The `MessageChannel` is created internally.
+    ///
     /// The `func`: [`WebWorkerChannelFn`] argument should normally be instantiated using the
     /// [`crate::webworker_channel!`] macro. This ensures type safety and that the function
     /// is correctly exposed to the worker.
     ///
     /// Example:
     /// ```ignore
-    /// worker_pool().await.run_channel(webworker_channel!(process_with_progress), &my_data, port).await
+    /// let task = worker_pool().await
+    ///     .run_channel(webworker_channel!(process_with_progress), &data)
+    ///     .await;
+    ///
+    /// let progress: Progress = task.recv().await.expect("progress");
+    /// task.send(&Continue { should_continue: true });
+    /// let result: ProcessResult = task.result().await;
     /// ```
-    pub async fn run_channel<T, R>(
-        &self,
-        func: WebWorkerChannelFn<T, R>,
-        arg: &T,
-        port: MessagePort,
-    ) -> R
+    pub async fn run_channel<T, R>(&self, func: WebWorkerChannelFn<T, R>, arg: &T) -> ChannelTask<R>
     where
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.run_channel_internal(func, arg, port).await
+        self.run_channel_internal(func, arg).await
     }
 
     /// This function can outsource a task on a [`WebWorkerPool`] which has `Box<[u8]>` both as input and output.
@@ -271,15 +276,14 @@ impl WebWorkerPool {
         &self,
         func: WebWorkerChannelFn<T, R>,
         arg: &T,
-        port: MessagePort,
-    ) -> R
+    ) -> ChannelTask<R>
     where
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
         let worker_id = self.scheduler.schedule(self);
         self.workers[worker_id]
-            .run_channel_internal(func, arg, port)
+            .run_channel_internal(func, arg)
             .await
     }
 

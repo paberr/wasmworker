@@ -182,28 +182,23 @@ pub async fn process_with_progress(data: Vec<u8>, channel: Channel) -> ProcessRe
 Then use the `webworker_channel!` macro and `run_channel` method:
 
 ```rust,ignore
-use wasmworker::{webworker_channel, Channel, WebWorker};
+use wasmworker::{webworker_channel, WebWorker};
 
 let worker = WebWorker::new(None).await?;
 
-// Create a channel for bidirectional communication
-let (main_channel, worker_port) = Channel::new()?;
-
-// Start the async task
-let task = worker.run_channel(
-   webworker_channel!(process_with_progress),
-   &data,
-   worker_port,
-);
+// Start the async task — returns a ChannelTask for communication + result
+let task = worker
+   .run_channel(webworker_channel!(process_with_progress), &data)
+   .await;
 
 // Receive progress from worker
-let progress: Progress = main_channel.recv().await.unwrap();
+let progress: Progress = task.recv().await.unwrap();
 
 // Send response back to worker
-main_channel.send(&Continue { should_continue: true });
+task.send(&Continue { should_continue: true });
 
 // Wait for task completion
-let result = task.await;
+let result = task.result().await;
 ```
 
 ### Bundler support (Vite)

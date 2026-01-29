@@ -1,17 +1,21 @@
 #![doc = include_str!("../README.md")]
 #![allow(clippy::borrowed_box)]
 pub use channel::Channel;
+pub use channel_task::ChannelTask;
 pub use global::{
     has_worker_pool, init_optimized_worker_pool, init_worker_pool, worker_pool, AlreadyInitialized,
 };
 pub use pool::WorkerPoolOptions;
-pub use web_sys::MessagePort;
 pub use webworker::WebWorker;
+
+#[doc(hidden)]
+pub use web_sys::MessagePort;
 
 // Re-export WebWorkerPool from pool module
 pub use pool::WebWorkerPool;
 
 mod channel;
+mod channel_task;
 pub mod convert;
 pub mod error;
 pub mod func;
