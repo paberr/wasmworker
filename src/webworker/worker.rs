@@ -18,7 +18,7 @@ use web_sys::{
 use crate::{
     convert::{from_bytes, to_bytes},
     error::{Full, InitError},
-    func::WebWorkerFn,
+    func::{WebWorkerChannelFn, WebWorkerFn},
 };
 
 /// An internal type for the callback.
@@ -220,13 +220,24 @@ impl WebWorker {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.run_internal(func, arg, None).await
+        self.run_internal(func, arg).await
     }
 
-    #[cfg(feature = "serde")]
-    pub async fn run_with_channel<T, R>(
+    /// Run an async function with bidirectional channel support on this [`WebWorker`].
+    ///
+    /// The `func`: [`WebWorkerChannelFn`] argument should normally be instantiated using the
+    /// [`crate::webworker_channel!`] macro. This ensures type safety and that the function
+    /// is correctly exposed to the worker.
+    ///
+    /// If a task limit has been set, this function will yield until previous tasks have been finished.
+    ///
+    /// Example:
+    /// ```ignore
+    /// worker.run_channel(webworker_channel!(process_with_progress), &my_data, port).await
+    /// ```
+    pub async fn run_channel<T, R>(
         &self,
-        func: WebWorkerFn<T, R>,
+        func: WebWorkerChannelFn<T, R>,
         arg: &T,
         port: MessagePort,
     ) -> R
@@ -234,7 +245,7 @@ impl WebWorker {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.run_internal(func, arg, Some(port)).await
+        self.run_channel_internal(func, arg, port).await
     }
 
     /// This function differs from [`WebWorker::run`] by returning early if the given task limit is reached.
@@ -254,7 +265,7 @@ impl WebWorker {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.try_run_internal(func, arg, None).await
+        self.try_run_internal(func, arg).await
     }
 
     /// This function can outsource a task on a [`WebWorker`] which has `Box<[u8]>` both as input and output.
@@ -276,7 +287,7 @@ impl WebWorker {
         func: WebWorkerFn<Box<[u8]>, Box<[u8]>>,
         arg: &Box<[u8]>,
     ) -> Box<[u8]> {
-        self.run_internal(func, arg, None).await
+        self.run_internal(func, arg).await
     }
 
     /// This function differs from [`WebWorker::run_bytes`] by returning early if the given task limit is reached.
@@ -298,16 +309,15 @@ impl WebWorker {
         func: WebWorkerFn<Box<[u8]>, Box<[u8]>>,
         arg: &Box<[u8]>,
     ) -> Result<Box<[u8]>, Full> {
-        self.try_run_internal(func, arg, None).await
+        self.try_run_internal(func, arg).await
     }
 
-    /// Internal function to schedule a task to the worker.
+    /// Internal function to schedule a simple task to the worker.
     /// This variant returns early if a semaphore permit cannot be obtained immediately.
     pub(crate) async fn try_run_internal<T, R>(
         &self,
         func: WebWorkerFn<T, R>,
         arg: &T,
-        port: Option<MessagePort>,
     ) -> Result<R, Full>
     where
         T: Serialize + for<'de> Deserialize<'de>,
@@ -324,15 +334,32 @@ impl WebWorker {
         };
 
         // Convert arg and result.
-        Ok(self.force_run(func.name, arg, port).await)
+        Ok(self.force_run(func.name, arg, false, None).await)
     }
 
-    /// Internal function to schedule a task to the worker.
-    pub(crate) async fn run_internal<T, R>(
+    /// Internal function to schedule a simple task to the worker.
+    pub(crate) async fn run_internal<T, R>(&self, func: WebWorkerFn<T, R>, arg: &T) -> R
+    where
+        T: Serialize + for<'de> Deserialize<'de>,
+        R: Serialize + for<'de> Deserialize<'de>,
+    {
+        // Acquire permit if necessary.
+        let _permit = if let Some(ref s) = self.task_limit {
+            Some(s.acquire().await.unwrap())
+        } else {
+            None
+        };
+
+        // Convert arg and result.
+        self.force_run(func.name, arg, false, None).await
+    }
+
+    /// Internal function to schedule a channel task to the worker.
+    pub(crate) async fn run_channel_internal<T, R>(
         &self,
-        func: WebWorkerFn<T, R>,
+        func: WebWorkerChannelFn<T, R>,
         arg: &T,
-        port: Option<MessagePort>,
+        port: MessagePort,
     ) -> R
     where
         T: Serialize + for<'de> Deserialize<'de>,
@@ -346,7 +373,7 @@ impl WebWorker {
         };
 
         // Convert arg and result.
-        self.force_run(func.name, arg, port).await
+        self.force_run(func.name, arg, true, Some(port)).await
     }
 
     /// This function handles the communication with the worker
@@ -356,6 +383,7 @@ impl WebWorker {
         &self,
         func_name: &'static str,
         arg: &T,
+        is_channel: bool,
         port: Option<MessagePort>,
     ) -> R
     where
@@ -366,6 +394,7 @@ impl WebWorker {
         let request = Request {
             id,
             func_name,
+            is_channel,
             arg: to_bytes(arg),
         };
 

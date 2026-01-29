@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 
-for (let name of ['web']) {
+for (let name of ['web', 'vite']) {
   test(name, async ({ page }) => {
     /** @type {Promise<void>} */
     let functionExposed;

@@ -8,7 +8,8 @@ In contrast to many other libraries like [wasm-bindgen-rayon](https://github.com
     - [WebWorker](#webworker)
     - [WebWorkerPool](#webworkerpool)
     - [Iterator extension](#iterator-extension)
-  - [Feature detection](#feature-detection)
+    - [Async functions with channels](#async-functions-with-channels)
+  - [Bundler support (Vite)](#bundler-support-vite)
 - [FAQ](#faq)
 
 ## Usage
@@ -117,6 +118,131 @@ let some_vec = vec![
 let res: Vec<VecType> = some_vec.iter().par_map(webworker!(sort_vec)).await;
 ```
 
+#### Async functions with channels
+For more complex use cases like progress reporting or interactive workflows, you can use async functions with bidirectional channel support.
+
+First, define an async function with the `#[webworker_channel_fn]` macro:
+
+```rust,ignore
+use wasmworker::Channel;
+use wasmworker_proc_macro::webworker_channel_fn;
+
+#[derive(Serialize, Deserialize)]
+pub struct Progress { pub percent: u8 }
+
+#[derive(Serialize, Deserialize)]
+pub struct Continue { pub should_continue: bool }
+
+#[webworker_channel_fn]
+pub async fn process_with_progress(data: Vec<u8>, channel: Channel) -> ProcessResult {
+   // Report progress to main thread
+   channel.send(&Progress { percent: 50 });
+
+   // Wait for response from main thread
+   let response: Option<Continue> = channel.recv().await;
+   if let Some(cont) = response {
+      if !cont.should_continue {
+            return ProcessResult { was_cancelled: true, .. };
+      }
+   }
+
+   // Continue processing...
+   ProcessResult { was_cancelled: false, .. }
+}
+```
+
+Then use the `webworker_channel!` macro and `run_channel` method:
+
+```rust,ignore
+use wasmworker::{webworker_channel, Channel, WebWorker};
+
+let worker = WebWorker::new(None).await?;
+
+// Create a channel for bidirectional communication
+let (main_channel, worker_port) = Channel::new()?;
+
+// Start the async task
+let task = worker.run_channel(
+   webworker_channel!(process_with_progress),
+   &data,
+   worker_port,
+);
+
+// Receive progress from worker
+let progress: Progress = main_channel.recv().await.unwrap();
+
+// Send response back to worker
+main_channel.send(&Continue { should_continue: true });
+
+// Wait for task completion
+let result = task.await;
+```
+
+### Bundler support (Vite)
+The recommended approach for Vite is to place the wasm-pack output in Vite's `publicDir`.
+This keeps the glue code and WASM binary as static assets, which is required because each
+WebWorker needs to import the glue code independently via `import()`.
+
+A working example is in `test/vite-app/`.
+
+**1. Build with wasm-pack:**
+```sh
+wasm-pack build --target web --out-name myapp --out-dir my-vite-app/pkg
+```
+
+**2. Configure Vite** (`vite.config.js`):
+```js
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  base: './',
+  build: {
+    target: 'esnext',
+    rollupOptions: {
+      // Don't try to bundle the wasm-pack glue code
+      external: [/\.\/myapp\.js$/],
+    },
+  },
+  // Serve the wasm-pack output as static assets (not bundled)
+  publicDir: 'pkg',
+});
+```
+
+**3. Load in your entry point** (`index.js`):
+```js
+// Dynamic import with @vite-ignore to skip Vite's module resolution
+const { default: init, /* your exports */ } = await import(/* @vite-ignore */ './myapp.js');
+await init();
+```
+
+No Rust-side changes are needed — `import.meta.url` resolves correctly when the glue code is served as a static asset.
+
+#### Advanced: custom paths
+
+If your build setup places the wasm-bindgen glue or WASM binary at non-standard locations
+(e.g., hashed filenames, nested directories), you can override the paths explicitly:
+
+```rust,ignore
+use wasmworker::{init_worker_pool, WorkerPoolOptions};
+
+let mut options = WorkerPoolOptions::new();
+// Path to the wasm-bindgen glue file (used by worker blob's import())
+options.path = Some("/assets/myapp.js".to_string());
+// Path to the WASM binary (passed to wasm-bindgen's init function)
+options.path_bg = Some("/assets/myapp_bg.wasm".to_string());
+init_worker_pool(options).await?;
+```
+
+#### Precompiling WASM
+
+To reduce bandwidth (fetch WASM once instead of once per worker), you can precompile and share the module:
+
+```rust,ignore
+let mut options = WorkerPoolOptions::new();
+options.precompile_wasm = Some(true);
+init_worker_pool(options).await?;
+```
+
 ## FAQ
 1. _Why would you not want to use SharedArrayBuffers?_
 
@@ -132,4 +258,8 @@ let res: Vec<VecType> = some_vec.iter().par_map(webworker!(sort_vec)).await;
 
 3. _Can I use bundlers?_
 
-   The usage of bundlers has not been officially tested. This might be added in the future.
+   Yes! Vite is tested and supported. The recommended approach is to serve the wasm-pack
+   output as static assets (via Vite's `publicDir`) rather than bundling it. This ensures
+   each WebWorker can import the glue code independently.
+   See [Bundler support (Vite)](#bundler-support-vite) for a step-by-step guide
+   and `test/vite-app/` for a working example.

@@ -21,6 +21,9 @@ pub(super) struct Request {
     pub(crate) id: u32,
     /// The name of the function to be executed by the worker.
     pub(crate) func_name: &'static str,
+    /// Whether this is a channel function (uses `__webworker_channel_` prefix).
+    #[serde(default)]
+    pub(crate) is_channel: bool,
     /// The serialized argument to be passed to the function.
     /// Serialization is done using [`crate::convert::to_bytes`].
     #[serde(with = "serde_bytes")]

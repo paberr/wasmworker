@@ -24,9 +24,10 @@ console.debug('Initializing worker');
 
     self.addEventListener('message', async event => {
         console.debug('Received worker event');
-        const { id, func_name, arg } = event.data;
+        const { id, func_name, is_channel, arg } = event.data;
 
-        const webworker_func_name = `__webworker_${func_name}`;
+        const prefix = is_channel ? '__webworker_channel_' : '__webworker_';
+        const webworker_func_name = `${prefix}${func_name}`;
         const fn = mod[webworker_func_name];
         if (!fn) {
             console.error(`Function '${func_name}' is not exported.`);
@@ -89,9 +90,10 @@ initHandler = async function(event) {
         // Add the main message handler for tasks
         self.addEventListener('message', async event => {
             console.debug('Received worker event');
-            const { id, func_name, arg } = event.data;
+            const { id, func_name, is_channel, arg } = event.data;
 
-            const webworker_func_name = `__webworker_${func_name}`;
+            const prefix = is_channel ? '__webworker_channel_' : '__webworker_';
+            const webworker_func_name = `${prefix}${func_name}`;
             const fn = mod[webworker_func_name];
             if (!fn) {
                 console.error(`Function '${func_name}' is not exported.`);
