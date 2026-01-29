@@ -7,7 +7,7 @@ pub use scheduler::Strategy;
 use serde::{Deserialize, Serialize};
 
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{window, MessagePort};
+use web_sys::window;
 
 use crate::{
     error::InitError,
@@ -215,21 +215,23 @@ impl WebWorkerPool {
     /// [`crate::webworker_channel!`] macro. This ensures type safety and that the function
     /// is correctly exposed to the worker.
     ///
+    /// Returns a [`Channel`] for bidirectional communication and a future that resolves
+    /// to the function's return value. See [`WebWorker::run_channel`] for details.
+    ///
     /// Example:
     /// ```ignore
-    /// worker_pool().await.run_channel(webworker_channel!(process_with_progress), &my_data, port).await
+    /// let (channel, result) = worker_pool().await.run_channel(webworker_channel!(process_with_progress), &my_data).await;
     /// ```
     pub async fn run_channel<T, R>(
         &self,
         func: WebWorkerChannelFn<T, R>,
         arg: &T,
-        port: MessagePort,
-    ) -> R
+    ) -> (crate::Channel, impl std::future::Future<Output = R> + '_)
     where
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.run_channel_internal(func, arg, port).await
+        self.run_channel_internal(func, arg).await
     }
 
     /// This function can outsource a task on a [`WebWorkerPool`] which has `Box<[u8]>` both as input and output.
@@ -271,15 +273,14 @@ impl WebWorkerPool {
         &self,
         func: WebWorkerChannelFn<T, R>,
         arg: &T,
-        port: MessagePort,
-    ) -> R
+    ) -> (crate::Channel, impl std::future::Future<Output = R> + '_)
     where
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
         let worker_id = self.scheduler.schedule(self);
         self.workers[worker_id]
-            .run_channel_internal(func, arg, port)
+            .run_channel_internal(func, arg)
             .await
     }
 

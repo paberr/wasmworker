@@ -19,6 +19,7 @@ use crate::{
     convert::{from_bytes, to_bytes},
     error::{Full, InitError},
     func::{WebWorkerChannelFn, WebWorkerFn},
+    Channel,
 };
 
 /// An internal type for the callback.
@@ -238,23 +239,30 @@ impl WebWorker {
     /// [`crate::webworker_channel!`] macro. This ensures type safety and that the function
     /// is correctly exposed to the worker.
     ///
+    /// Returns a [`Channel`] for bidirectional communication and a future that resolves
+    /// to the function's return value. The channel and result share the same underlying
+    /// `MessagePort`, guaranteeing that all channel messages sent during execution are
+    /// delivered before the result.
+    ///
     /// If a task limit has been set, this function will yield until previous tasks have been finished.
     ///
     /// Example:
     /// ```ignore
-    /// worker.run_channel(webworker_channel!(process_with_progress), &my_data, port).await
+    /// let (channel, result) = worker.run_channel(webworker_channel!(process_with_progress), &my_data).await;
+    /// let progress: Progress = channel.recv().await.unwrap();
+    /// channel.send(&Continue { should_continue: true });
+    /// let result = result.await;
     /// ```
     pub async fn run_channel<T, R>(
         &self,
         func: WebWorkerChannelFn<T, R>,
         arg: &T,
-        port: MessagePort,
-    ) -> R
+    ) -> (Channel, impl std::future::Future<Output = R> + '_)
     where
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.run_channel_internal(func, arg, port).await
+        self.run_channel_internal(func, arg).await
     }
 
     /// This function differs from [`WebWorker::run`] by returning early if the given task limit is reached.
@@ -364,25 +372,103 @@ impl WebWorker {
     }
 
     /// Internal function to schedule a channel task to the worker.
+    ///
+    /// Creates a `MessageChannel` internally. The worker-side port is transferred
+    /// to the worker; the main-side port is used for both user messages AND the
+    /// task result (tagged with `__wasmworker_result`). Because everything travels
+    /// through a single `MessagePort`, FIFO ordering is guaranteed: all channel
+    /// messages sent during execution arrive before the result.
     pub(crate) async fn run_channel_internal<T, R>(
         &self,
         func: WebWorkerChannelFn<T, R>,
         arg: &T,
-        port: MessagePort,
-    ) -> R
+    ) -> (Channel, impl std::future::Future<Output = R> + '_)
     where
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
+        use tokio::sync::mpsc;
+        use web_sys::MessageChannel;
+
         // Acquire permit if necessary.
-        let _permit = if let Some(ref s) = self.task_limit {
+        let permit = if let Some(ref s) = self.task_limit {
             Some(s.acquire().await.unwrap())
         } else {
             None
         };
 
-        // Convert arg and result.
-        self.force_run(func.name, arg, true, Some(port)).await
+        // Create a MessageChannel. The worker-side port is transferred to the
+        // worker. The main-side port receives both user messages and the tagged
+        // result, so we set up a dual-purpose onmessage callback.
+        let msg_channel =
+            MessageChannel::new().expect_throw("Could not create MessageChannel");
+        let main_port = msg_channel.port1();
+        let worker_port = msg_channel.port2();
+
+        let (result_tx, result_rx) = oneshot::channel::<JsValue>();
+        let result_tx = Rc::new(RefCell::new(Some(result_tx)));
+        let (user_tx, user_rx) = mpsc::unbounded_channel::<JsValue>();
+
+        // Callback that routes __wasmworker_result to result_tx, everything else
+        // to user_tx (the Channel's message stream).
+        let callback: Closure<dyn FnMut(MessageEvent)> = {
+            let result_tx = Rc::clone(&result_tx);
+            Closure::new(move |event: MessageEvent| {
+                let data = event.data();
+                // Check for the result tag (an Object with __wasmworker_result).
+                // User messages are Uint8Array, so this check is unambiguous.
+                if data.is_object() {
+                    if let Ok(result) = js_sys::Reflect::get(
+                        &data,
+                        &JsValue::from_str("__wasmworker_result"),
+                    ) {
+                        if !result.is_undefined() {
+                            if let Some(tx) = result_tx.borrow_mut().take() {
+                                let _ = tx.send(result);
+                            }
+                            return;
+                        }
+                    }
+                }
+                let _ = user_tx.send(data);
+            })
+        };
+        main_port.set_onmessage(Some(callback.as_ref().unchecked_ref()));
+        callback.forget();
+
+        let channel = Channel::from_parts(user_rx, main_port);
+
+        // Serialize and send request (with port transfer, no open_tasks registration).
+        let id = self.current_task.fetch_add(1, Ordering::Relaxed);
+        let request = Request {
+            id,
+            func_name: func.name,
+            is_channel: true,
+            arg: to_bytes(arg),
+        };
+
+        let transfer = Array::new();
+        transfer.push(&worker_port);
+        self.worker
+            .post_message_with_transfer(
+                &serde_wasm_bindgen::to_value(&request)
+                    .expect_throw("Could not serialize request"),
+                &transfer,
+            )
+            .expect_throw("WebWorker gone");
+
+        // The result future awaits the tagged result from the port.
+        let result_future = async move {
+            let _permit = permit; // keep permit alive until result arrives
+            let raw = result_rx
+                .await
+                .expect_throw("Channel result sender dropped");
+            let array = js_sys::Uint8Array::new(&raw);
+            let bytes = array.to_vec();
+            from_bytes::<R>(&bytes)
+        };
+
+        (channel, result_future)
     }
 
     /// This function handles the communication with the worker

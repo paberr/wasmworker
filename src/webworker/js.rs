@@ -37,18 +37,18 @@ console.debug('Initializing worker');
 
         const worker_result = await fn(arg, event.ports[0]);
 
-        // For channel tasks, yield the event loop before posting the result.
-        // Channel messages (sent via MessagePort.postMessage during execution)
-        // and the task result (sent via self.postMessage) travel on independent
-        // message paths. Without this yield, the main thread may receive the
-        // result before all channel messages have been delivered.
-        if (is_channel) {
-            await new Promise(resolve => setTimeout(resolve, 0));
+        if (is_channel && event.ports[0]) {
+            // For channel tasks, send the result through the same MessagePort
+            // used for channel messages. This guarantees FIFO ordering: all
+            // channel messages sent during execution will be delivered before
+            // the result, because a single MessagePort preserves message order.
+            console.debug('Send channel result via port');
+            event.ports[0].postMessage({ __wasmworker_result: worker_result });
+        } else {
+            // Send response back to be handled by callback in main thread.
+            console.debug('Send worker result');
+            self.postMessage({ id: id, response: worker_result });
         }
-
-        // Send response back to be handled by callback in main thread.
-        console.debug('Send worker result');
-        self.postMessage({ id: id, response: worker_result });
     });
 })();
 "#;
@@ -112,15 +112,15 @@ initHandler = async function(event) {
 
             const worker_result = await fn(arg, event.ports[0]);
 
-            // For channel tasks, yield the event loop before posting the result.
-            // See comment in WORKER_JS for rationale.
-            if (is_channel) {
-                await new Promise(resolve => setTimeout(resolve, 0));
+            if (is_channel && event.ports[0]) {
+                // See comment in WORKER_JS for rationale.
+                console.debug('Send channel result via port');
+                event.ports[0].postMessage({ __wasmworker_result: worker_result });
+            } else {
+                // Send response back to be handled by callback in main thread.
+                console.debug('Send worker result');
+                self.postMessage({ id: id, response: worker_result });
             }
-
-            // Send response back to be handled by callback in main thread.
-            console.debug('Send worker result');
-            self.postMessage({ id: id, response: worker_result });
         });
     }
 };

@@ -33,6 +33,20 @@ impl Channel {
         Ok((Self::from(channel.port1()), channel.port2()))
     }
 
+    /// Create a Channel from pre-built components.
+    ///
+    /// This is used internally when the onmessage callback needs custom routing
+    /// (e.g., to split user messages from result messages on the same port).
+    pub(crate) fn from_parts(
+        messages: mpsc::UnboundedReceiver<JsValue>,
+        port: MessagePort,
+    ) -> Self {
+        Self {
+            messages: Rc::new(RefCell::new(messages)),
+            port,
+        }
+    }
+
     /// Handle messages received by the port and forwards them into the message stream
     fn on_message_callback(
         sender: mpsc::UnboundedSender<JsValue>,

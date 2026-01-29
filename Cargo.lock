@@ -574,12 +574,10 @@ name = "wasmworker-test"
 version = "0.1.0"
 dependencies = [
  "serde",
- "tokio",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasmworker",
  "wasmworker-proc-macro",
- "web-sys",
 ]
 
 [[package]]

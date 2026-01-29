@@ -1,6 +1,3 @@
-use futures::future::select;
-use futures::future::Either;
-use futures::pin_mut;
 use serde::{Deserialize, Serialize};
 use wasmworker::{webworker_channel, worker_pool, Channel, WebWorker};
 use wasmworker_proc_macro::webworker_channel_fn;
@@ -37,15 +34,17 @@ pub async fn process_with_progress(data: Vec<u8>, channel: Channel) -> ProcessRe
         if i == total / 2 {
             channel.send(&Progress { percent: 50 });
 
-            // Wait for confirmation to continue
-            let response: Option<Continue> = channel.recv().await;
-            if let Some(cont) = response {
-                if !cont.should_continue {
-                    return ProcessResult {
-                        items_processed: processed,
-                        was_cancelled: true,
-                    };
-                }
+            // Wait for confirmation to continue (must not be None — that
+            // would mean the channel was closed before a response was sent).
+            let cont: Continue = channel
+                .recv()
+                .await
+                .expect("Channel closed unexpectedly before receiving Continue");
+            if !cont.should_continue {
+                return ProcessResult {
+                    items_processed: processed,
+                    was_cancelled: true,
+                };
             }
         }
 
@@ -61,57 +60,41 @@ pub async fn process_with_progress(data: Vec<u8>, channel: Channel) -> ProcessRe
     }
 }
 
-/// Helper to wait for progress while keeping the task alive.
-async fn wait_for_progress<F>(task: &mut F, channel: &Channel) -> Progress
-where
-    F: std::future::Future<Output = ProcessResult> + Unpin,
-{
-    let recv = channel.recv::<Progress>();
-    pin_mut!(recv);
-
-    match select(task, recv).await {
-        Either::Left((result, _)) => {
-            wasm_bindgen::throw_str(&format!(
-                "Task completed unexpectedly before progress: {:?}",
-                result
-            ));
-        }
-        Either::Right((progress, _)) => progress.expect("Should receive progress"),
-    }
-}
-
 /// Test that channel functions work with a single WebWorker.
 pub(crate) async fn can_use_channel_with_worker() {
     let worker = WebWorker::new(None).await.expect("Couldn't create worker");
 
-    // Create a channel for communication
-    let (main_channel, worker_port) = Channel::new().expect("Couldn't create channel");
-
     // Prepare input data
     let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-    // Start the task (returns a future)
-    let mut task = Box::pin(worker.run_channel(
-        webworker_channel!(process_with_progress),
-        &data,
-        worker_port,
-    ));
+    // Start the task — run_channel creates the channel internally and returns it
+    // alongside a future for the result. Both travel through the same MessagePort,
+    // so channel messages are guaranteed to arrive before the result (FIFO).
+    let (channel, result) = worker
+        .run_channel(webworker_channel!(process_with_progress), &data)
+        .await;
 
     // Wait for 50% progress
-    let progress = wait_for_progress(&mut task, &main_channel).await;
+    let progress: Progress = channel
+        .recv()
+        .await
+        .expect("Should receive 50% progress");
     js_assert_eq!(progress.percent, 50, "Should be at 50%");
 
     // Tell the worker to continue
-    main_channel.send(&Continue {
+    channel.send(&Continue {
         should_continue: true,
     });
 
     // Wait for 100% progress
-    let final_progress = wait_for_progress(&mut task, &main_channel).await;
+    let final_progress: Progress = channel
+        .recv()
+        .await
+        .expect("Should receive 100% progress");
     js_assert_eq!(final_progress.percent, 100, "Should be at 100%");
 
-    // Now wait for the task to complete
-    let result = task.await;
+    // Wait for the task to complete
+    let result = result.await;
     js_assert_eq!(result.items_processed, 10, "Should process all items");
     js_assert_eq!(result.was_cancelled, false, "Should not be cancelled");
 }
@@ -120,30 +103,28 @@ pub(crate) async fn can_use_channel_with_worker() {
 pub(crate) async fn can_cancel_channel_task() {
     let worker = WebWorker::new(None).await.expect("Couldn't create worker");
 
-    // Create a channel for communication
-    let (main_channel, worker_port) = Channel::new().expect("Couldn't create channel");
-
     // Prepare input data
     let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
     // Start the task
-    let mut task = Box::pin(worker.run_channel(
-        webworker_channel!(process_with_progress),
-        &data,
-        worker_port,
-    ));
+    let (channel, result) = worker
+        .run_channel(webworker_channel!(process_with_progress), &data)
+        .await;
 
     // Wait for 50% progress
-    let progress = wait_for_progress(&mut task, &main_channel).await;
+    let progress: Progress = channel
+        .recv()
+        .await
+        .expect("Should receive 50% progress");
     js_assert_eq!(progress.percent, 50, "Should be at 50%");
 
     // Tell the worker to cancel
-    main_channel.send(&Continue {
+    channel.send(&Continue {
         should_continue: false,
     });
 
     // Wait for result (no 100% progress expected since we cancelled)
-    let result = task.await;
+    let result = result.await;
     js_assert_eq!(result.items_processed, 5, "Should process half the items");
     js_assert_eq!(result.was_cancelled, true, "Should be cancelled");
 }
@@ -152,34 +133,35 @@ pub(crate) async fn can_cancel_channel_task() {
 pub(crate) async fn can_use_channel_with_pool() {
     let pool = worker_pool().await;
 
-    // Create a channel for communication
-    let (main_channel, worker_port) = Channel::new().expect("Couldn't create channel");
-
     // Prepare input data
     let data = vec![1, 2, 3, 4];
 
     // Start the task on the pool
-    let mut task = Box::pin(pool.run_channel(
-        webworker_channel!(process_with_progress),
-        &data,
-        worker_port,
-    ));
+    let (channel, result) = pool
+        .run_channel(webworker_channel!(process_with_progress), &data)
+        .await;
 
     // Wait for 50% progress
-    let progress = wait_for_progress(&mut task, &main_channel).await;
+    let progress: Progress = channel
+        .recv()
+        .await
+        .expect("Should receive 50% progress");
     js_assert_eq!(progress.percent, 50, "Should be at 50%");
 
     // Tell the worker to continue
-    main_channel.send(&Continue {
+    channel.send(&Continue {
         should_continue: true,
     });
 
     // Wait for 100% progress
-    let final_progress = wait_for_progress(&mut task, &main_channel).await;
+    let final_progress: Progress = channel
+        .recv()
+        .await
+        .expect("Should receive 100% progress");
     js_assert_eq!(final_progress.percent, 100, "Should be at 100%");
 
     // Wait for completion
-    let result = task.await;
+    let result = result.await;
     js_assert_eq!(result.items_processed, 4, "Should process all items");
     js_assert_eq!(result.was_cancelled, false, "Should not be cancelled");
 }
