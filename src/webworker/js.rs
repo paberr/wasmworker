@@ -48,7 +48,7 @@ console.debug('Initializing worker');
 pub(crate) fn main_js() -> JsString {
     #[wasm_bindgen]
     extern "C" {
-        #[wasm_bindgen(thread_local, js_namespace = ["import", "meta"], js_name = url)]
+        #[wasm_bindgen(thread_local_v2, js_namespace = ["import", "meta"], js_name = url)]
         static URL: JsString;
     }
 

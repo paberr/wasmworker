@@ -120,16 +120,16 @@ let res: Vec<VecType> = some_vec.iter().par_map(webworker!(sort_vec)).await;
 ## FAQ
 1. _Why would you not want to use SharedArrayBuffers?_
 
-    The use of SharedArrayBuffers requires cross-origin policy headers to be set, which is not possible in every environment.
-    Moreover, most libraries that rely on SharedArrayBuffers, also require a nightly version of Rust at the moment.
-    An important goal of this library is to remove these requirements.
+   The use of SharedArrayBuffers requires cross-origin policy headers to be set, which is not possible in every environment.
+   Moreover, most libraries that rely on SharedArrayBuffers, also require a nightly version of Rust at the moment.
+   An important goal of this library is to remove these requirements.
 
 2. _Which `wasm-bindgen` targets are supported?_
 
-    So far, this library has only been tested with `--target web`.
-    Other targets seem to generally be problematic in that the wasm glue is inaccessible or paths are not correct.
-    Both the `Worker` and `WebWorkerPool` have an option to set a custom path, which should make it possible to support other targets dynamically, though.
+   So far, this library has only been tested with `--target web`.
+   Other targets seem to generally be problematic in that the wasm glue is inaccessible or paths are not correct.
+   Both the `Worker` and `WebWorkerPool` have an option to set a custom path, which should make it possible to support other targets dynamically, though.
 
 3. _Can I use bundlers?_
 
-    The usage of bundlers has not been officially tested. This might be added in the future.
+   The usage of bundlers has not been officially tested. This might be added in the future.
