@@ -22,8 +22,8 @@ To use this library, include both dependencies to your `Cargo.toml`.
 
 ```toml
 [dependencies]
-wasmworker = "0.1"
-wasmworker-proc-macro = "0.1"
+wasmworker = "0.2"
+wasmworker-proc-macro = "0.2"
 ```
 
 The `wasmworker` crate comes with a default feature called `serde`, which allows running any function on a web worker under the following two conditions:
