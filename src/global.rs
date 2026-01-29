@@ -1,20 +1,39 @@
 use send_wrapper::SendWrapper;
 use tokio::sync::OnceCell;
-use wasm_bindgen::{prelude::wasm_bindgen, UnwrapThrowExt};
+use wasm_bindgen::{prelude::wasm_bindgen, JsValue, UnwrapThrowExt};
 
 use crate::pool::{WebWorkerPool, WorkerPoolOptions};
 
 static WORKER_POOL: OnceCell<SendWrapper<WebWorkerPool>> = OnceCell::const_new();
 
+/// Error returned when [`init_worker_pool`] is called after the worker pool has already been initialized.
+#[derive(Debug, Clone, Copy)]
+pub struct AlreadyInitialized;
+
+impl std::fmt::Display for AlreadyInitialized {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Worker pool has already been initialized")
+    }
+}
+
+impl std::error::Error for AlreadyInitialized {}
+
+impl From<AlreadyInitialized> for JsValue {
+    fn from(err: AlreadyInitialized) -> Self {
+        JsValue::from_str(&err.to_string())
+    }
+}
+
 /// This function can be called before the first use of the global worker pool to configure it.
 /// It takes a [`WorkerPoolOptions`] configuration object. Note that this function is async.
 ///
+/// Returns an error if the worker pool has already been initialized (options would be ignored).
+///
 /// ```ignore
 /// # use wasmworker::{init_worker_pool, WorkerPoolOptions};
-/// init_worker_pool(WorkerPoolOptions {
-///     num_workers: Some(2),
-///     ..Default::default()
-/// }).await
+/// let mut options = WorkerPoolOptions::new();
+/// options.num_workers = Some(2);
+/// init_worker_pool(options).await.expect("Worker pool already initialized");
 /// ```
 ///
 /// This function can also be called from JavaScript:
@@ -28,18 +47,13 @@ static WORKER_POOL: OnceCell<SendWrapper<WebWorkerPool>> = OnceCell::const_new()
 /// await initWorkerPool(options);
 /// ```
 #[wasm_bindgen(js_name = initWorkerPool)]
-pub async fn init_worker_pool(options: WorkerPoolOptions) {
-    WORKER_POOL
-        // should call `set` instead to correctly error when it has already been initialized.
-        // otherwise options would get silently ignored.
-        .get_or_init(|| async move {
-            SendWrapper::new(
-                WebWorkerPool::with_options(options)
-                    .await
-                    .expect_throw("Couldn't instantiate worker pool"),
-            )
-        })
-        .await;
+pub async fn init_worker_pool(options: WorkerPoolOptions) -> Result<(), AlreadyInitialized> {
+    let pool = SendWrapper::new(
+        WebWorkerPool::with_options(options)
+            .await
+            .expect_throw("Couldn't instantiate worker pool"),
+    );
+    WORKER_POOL.set(pool).map_err(|_| AlreadyInitialized)
 }
 
 /// This function accesses the default worker pool.

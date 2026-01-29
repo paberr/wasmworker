@@ -154,9 +154,6 @@ impl WebWorkerPool {
     /// ```ignore
     /// worker_pool().await.run(webworker!(sort_vec), &my_vec).await
     /// ```
-    // serde feature seems superfluous as it doesn't disable any dependencies.
-    // suggestion: remove the serde feature, but keep the same functions.
-    #[cfg(feature = "serde")]
     pub async fn run<T, R>(&self, func: WebWorkerFn<T, R>, arg: &T) -> R
     where
         T: Serialize + for<'de> Deserialize<'de>,

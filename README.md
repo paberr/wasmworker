@@ -34,16 +34,15 @@ This is useful for users that do not want a direct serde dependency. Internally,
 
 You can then start using the library without further setup.
 If you plan on using the global `WebWorkerPool` (using the iterator extensions or `worker_pool()`), you can *optionally* configure this pool:
-```rust
+```rust,ignore
 // Importing it publicly will also expose the function on the JavaScript side.
 // You can instantiate the pool both via Rust and JS.
 pub use wasmworker::{init_worker_pool, WorkerPoolOptions};
 
 async fn startup() {
-    init_worker_pool(WorkerPoolOptions {
-        num_workers: Some(2), // Default is navigator.hardwareConcurrency
-        ..Default::default()
-    }).await;
+    let mut options = WorkerPoolOptions::new();
+    options.num_workers = Some(2); // Default is navigator.hardwareConcurrency
+    init_worker_pool(options).await.expect("Worker pool already initialized");
 }
 ```
 

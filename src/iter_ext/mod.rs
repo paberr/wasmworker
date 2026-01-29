@@ -1,4 +1,3 @@
-// file can be in src/iter_ext.rs instead of src/iter_ext/mod.rs
 use std::borrow::Borrow;
 
 use futures::future::join_all;
@@ -52,10 +51,6 @@ where
     /// vec.iter().try_par_map(webworker!(my_func)).await
     /// ```
     #[allow(async_fn_in_trait)]
-    // try sounds like something that could fail.
-    // maybe: par_map_if_available?
-    //
-    // nice idea btw
     async fn try_par_map<R>(self, func: WebWorkerFn<T, R>) -> Vec<R>
     where
         Self::Item: Into<T>,

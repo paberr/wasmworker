@@ -1,4 +1,3 @@
-// reviewed
 /// This struct describes the function to be called by the worker.
 /// It also ensures type safety, when constructed using the [`crate::webworker!`] macro.
 pub struct WebWorkerFn<T, R> {

@@ -6,15 +6,13 @@ use thiserror::Error;
 /// is called.
 #[derive(Debug, Error)]
 #[error("WebWorker capacity reached")]
-// perhaps make this struct forward compatible by including a private member.
-// `pub struct Full(());`
 pub struct Full;
 
 /// This error is returned during the creation of a new web worker.
 /// It covers generic errors in the actual creation and import errors
 /// during the initialization.
-// perhaps don't expose the variants (for forward compatibility)
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum InitError {
     /// This error covers errors during the `new Worker()` command.
     #[error("WebWorker creation error: {0:?}")]

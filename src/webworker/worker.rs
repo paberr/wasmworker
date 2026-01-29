@@ -1,7 +1,8 @@
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     collections::HashMap,
     rc::Rc,
+    sync::atomic::{AtomicU32, Ordering},
 };
 
 use super::com::*;
@@ -39,10 +40,10 @@ pub struct WebWorker {
     /// An optional limit on the number of tasks queued at the same time.
     task_limit: Option<Semaphore>,
     /// The current task id, which is used to reidentify responses.
-    current_task: Cell<usize>,
+    current_task: AtomicU32,
     /// A map between task ids and the channel they need to be sent out with.
     /// [`Response`]s will arrive on our callback and we redistribute them to their origin.
-    open_tasks: Rc<RefCell<HashMap<usize, oneshot::Sender<Response>>>>,
+    open_tasks: Rc<RefCell<HashMap<u32, oneshot::Sender<Response>>>>,
     /// The callback handle for the worker.
     _callback: Closure<Callback>,
 }
@@ -127,7 +128,7 @@ impl WebWorker {
         Ok(WebWorker {
             worker,
             task_limit: task_limit.map(|limit| Semaphore::new(limit)),
-            current_task: Cell::new(0),
+            current_task: AtomicU32::new(0),
             open_tasks: tasks,
             _callback: callback_handle,
         })
@@ -135,7 +136,7 @@ impl WebWorker {
 
     /// Function to be called when a result is ready.
     fn callback(
-        tasks: Rc<RefCell<HashMap<usize, oneshot::Sender<Response>>>>,
+        tasks: Rc<RefCell<HashMap<u32, oneshot::Sender<Response>>>>,
     ) -> Closure<dyn FnMut(MessageEvent)> {
         Closure::new(move |event: MessageEvent| {
             let data = event.data();
@@ -165,7 +166,6 @@ impl WebWorker {
     /// ```ignore
     /// worker.run(webworker!(sort_vec), &my_vec).await
     /// ```
-    #[cfg(feature = "serde")]
     pub async fn run<T, R>(&self, func: WebWorkerFn<T, R>, arg: &T) -> R
     where
         T: Serialize + for<'de> Deserialize<'de>,
@@ -186,7 +186,6 @@ impl WebWorker {
     /// ```ignore
     /// worker.try_run(webworker!(sort_vec), &my_vec).await
     /// ```
-    #[cfg(feature = "serde")]
     pub async fn try_run<T, R>(&self, func: WebWorkerFn<T, R>, arg: &T) -> Result<R, Full>
     where
         T: Serialize + for<'de> Deserialize<'de>,
@@ -289,18 +288,20 @@ impl WebWorker {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        let id = self.current_task.get();
-        self.current_task.set(id.wrapping_add(1));
+        let id = self.current_task.fetch_add(1, Ordering::Relaxed);
         let request = Request {
             id,
             func_name,
             arg: to_bytes(arg),
         };
-        // could probably extract everything from here into another function,
-        // to pay less monomorphisation cost, less code that needs to be
-        // duplicated for each set of argument types that the function is
-        // called with.
 
+        let res = self.send_request(id, request).await;
+        from_bytes(&res)
+    }
+
+    /// Sends a request to the worker and waits for the response.
+    /// This is extracted from `force_run` to reduce monomorphisation cost.
+    async fn send_request(&self, id: u32, request: Request) -> Vec<u8> {
         // Create channel and add task.
         let (sender, receiver) = oneshot::channel();
         self.open_tasks.borrow_mut().insert(id, sender);
@@ -312,13 +313,11 @@ impl WebWorker {
             .expect_throw("WebWorker gone");
 
         // Handle result.
-        let res = receiver
+        receiver
             .await
             .expect_throw("WebWorker gone")
             .response
-            .expect_throw("Could not find function");
-        // until here
-        from_bytes(&res)
+            .expect_throw("Could not find function")
     }
 
     /// Return the current capacity for new tasks.
