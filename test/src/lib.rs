@@ -1,7 +1,9 @@
+use channel::*;
 use convert::*;
 use raw::*;
 use wasm_bindgen::prelude::wasm_bindgen;
 
+pub(crate) mod channel;
 pub(crate) mod convert;
 pub(crate) mod raw;
 
@@ -32,4 +34,13 @@ pub async fn run_tests() {
     can_limit_tasks().await;
     can_schedule_task().await;
     can_use_iter_ext().await;
+
+    // Channel tests
+    can_use_channel_with_worker().await;
+    can_cancel_channel_task().await;
+    can_use_channel_with_pool().await;
+
+    // Pool configuration tests
+    can_use_precompiled_wasm().await;
+    can_use_custom_pool_options().await;
 }

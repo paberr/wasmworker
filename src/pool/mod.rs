@@ -9,7 +9,11 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{window, MessagePort};
 
-use crate::{error::InitError, func::WebWorkerFn, WebWorker};
+use crate::{
+    error::InitError,
+    func::{WebWorkerChannelFn, WebWorkerFn},
+    WebWorker,
+};
 
 mod scheduler;
 
@@ -24,10 +28,15 @@ mod scheduler;
 #[derive(Default, Clone)]
 #[non_exhaustive]
 pub struct WorkerPoolOptions {
-    /// The path to the wasm-bindgen glue. By default, this path is inferred.
+    /// The path to the wasm-bindgen glue JS file. By default, this path is inferred
+    /// from `import.meta.url`.
     /// [`crate::WebWorker::with_path`] lists more details on when this path
     /// should be manually configured.
     pub path: Option<String>,
+    /// The path to the WASM binary file. When set, this is passed as `module_or_path`
+    /// to the wasm-bindgen `init()` function inside the worker.
+    /// By default, the glue code resolves this automatically relative to itself.
+    /// Set this when your build setup places the WASM binary at a non-standard location.
     pub path_bg: Option<String>,
     /// The strategy to be used by the worker pool.
     pub strategy: Option<Strategy>,
@@ -188,13 +197,22 @@ impl WebWorkerPool {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.run_internal(func, arg, None).await
+        self.run_internal(func, arg).await
     }
 
-    #[cfg(feature = "serde")]
-    pub async fn run_with_channel<T, R>(
+    /// Run an async function with bidirectional channel support on this [`WebWorkerPool`].
+    ///
+    /// The `func`: [`WebWorkerChannelFn`] argument should normally be instantiated using the
+    /// [`crate::webworker_channel!`] macro. This ensures type safety and that the function
+    /// is correctly exposed to the worker.
+    ///
+    /// Example:
+    /// ```ignore
+    /// worker_pool().await.run_channel(webworker_channel!(process_with_progress), &my_data, port).await
+    /// ```
+    pub async fn run_channel<T, R>(
         &self,
-        func: WebWorkerFn<T, R>,
+        func: WebWorkerChannelFn<T, R>,
         arg: &T,
         port: MessagePort,
     ) -> R
@@ -202,7 +220,7 @@ impl WebWorkerPool {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        self.run_internal(func, arg, Some(port)).await
+        self.run_channel_internal(func, arg, port).await
     }
 
     /// This function can outsource a task on a [`WebWorkerPool`] which has `Box<[u8]>` both as input and output.
@@ -221,17 +239,12 @@ impl WebWorkerPool {
         func: WebWorkerFn<Box<[u8]>, Box<[u8]>>,
         arg: &Box<[u8]>,
     ) -> Box<[u8]> {
-        self.run_internal(func, arg, None).await
+        self.run_internal(func, arg).await
     }
 
-    /// Determines the worker to run the task on using the scheduler
+    /// Determines the worker to run a simple task on using the scheduler
     /// and runs the task.
-    pub(crate) async fn run_internal<T, R, A>(
-        &self,
-        func: WebWorkerFn<T, R>,
-        arg: A,
-        port: Option<MessagePort>,
-    ) -> R
+    pub(crate) async fn run_internal<T, R, A>(&self, func: WebWorkerFn<T, R>, arg: A) -> R
     where
         A: Borrow<T>,
         T: Serialize + for<'de> Deserialize<'de>,
@@ -239,7 +252,25 @@ impl WebWorkerPool {
     {
         let worker_id = self.scheduler.schedule(self);
         self.workers[worker_id]
-            .run_internal(func, arg.borrow(), port)
+            .run_internal(func, arg.borrow())
+            .await
+    }
+
+    /// Determines the worker to run a channel task on using the scheduler
+    /// and runs the task.
+    pub(crate) async fn run_channel_internal<T, R>(
+        &self,
+        func: WebWorkerChannelFn<T, R>,
+        arg: &T,
+        port: MessagePort,
+    ) -> R
+    where
+        T: Serialize + for<'de> Deserialize<'de>,
+        R: Serialize + for<'de> Deserialize<'de>,
+    {
+        let worker_id = self.scheduler.schedule(self);
+        self.workers[worker_id]
+            .run_channel_internal(func, arg, port)
             .await
     }
 
