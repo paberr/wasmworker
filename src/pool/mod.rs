@@ -95,7 +95,8 @@ pub struct WebWorkerPool {
     workers: Vec<WebWorker>,
     /// The internal scheduler that is used to distribute the tasks.
     scheduler: Scheduler,
-    /// Pre-compiled WASM module shared across workers
+    /// Pre-compiled WASM module shared across workers (kept alive to prevent dropping)
+    #[allow(dead_code)]
     wasm_module: Option<js_sys::WebAssembly::Module>,
 }
 
@@ -256,7 +257,7 @@ impl WebWorkerPool {
     /// This method pre-compiles the WASM module once and shares it across all workers,
     /// reducing bandwidth usage compared to each worker loading the WASM independently.
     pub async fn with_precompiled_wasm() -> Result<Self, InitError> {
-        let mut options = WorkerPoolOptions::default();
+        let mut options = WorkerPoolOptions::new();
         options.precompile_wasm = Some(true);
         Self::with_options(options).await
     }
