@@ -29,12 +29,21 @@ type Callback = dyn FnMut(MessageEvent);
 /// When an instance of this type is dropped, it also terminates the corresponding web worker.
 ///
 /// Example usage:
-/// ```ignore
+/// ```no_run
+/// # use serde::{Serialize, Deserialize};
+/// # use wasmworker_proc_macro::webworker_fn;
+/// # #[derive(Serialize, Deserialize, PartialEq, Debug)]
+/// # struct VecType(Vec<u32>);
+/// # #[webworker_fn]
+/// # pub fn sort_vec(mut v: VecType) -> VecType { v.0.sort(); v }
 /// use wasmworker::{webworker, WebWorker};
 ///
-/// let worker = WebWorker::new(None).await;
+/// # async fn example() {
+/// let worker = WebWorker::new(None).await.expect("Couldn't create worker");
 /// let res = worker.run(webworker!(sort_vec), &VecType(vec![5, 2, 8])).await;
 /// assert_eq!(res.0, vec![2, 5, 8]);
+/// # }
+/// # fn main() {}
 /// ```
 pub struct WebWorker {
     /// The underlying web worker.

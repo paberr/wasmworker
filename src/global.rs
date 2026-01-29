@@ -29,11 +29,13 @@ impl From<AlreadyInitialized> for JsValue {
 ///
 /// Returns an error if the worker pool has already been initialized (options would be ignored).
 ///
-/// ```ignore
-/// # use wasmworker::{init_worker_pool, WorkerPoolOptions};
+/// ```no_run
+/// # async fn example() {
+/// use wasmworker::{init_worker_pool, WorkerPoolOptions};
 /// let mut options = WorkerPoolOptions::new();
 /// options.num_workers = Some(2);
 /// init_worker_pool(options).await.expect("Worker pool already initialized");
+/// # }
 /// ```
 ///
 /// This function can also be called from JavaScript:

@@ -87,14 +87,21 @@ impl<T, R> WebWorkerChannelFn<T, R> {
 /// It ensures that the function is exposed via the `#[webworker_fn]` procedural macro.
 ///
 /// Example:
-/// ```ignore
+/// ```no_run
+/// # use serde::{Serialize, Deserialize};
+/// # use wasmworker_proc_macro::webworker_fn;
+/// # use wasmworker::{webworker, func::WebWorkerFn};
+/// # #[derive(Serialize, Deserialize)]
+/// # struct VecType(Vec<u32>);
 /// #[webworker_fn]
 /// pub fn sort_vec(mut v: VecType) -> VecType {
 ///     v.0.sort();
 ///     v
 /// }
 ///
+/// # fn main() {
 /// let func: WebWorkerFn<VecType, VecType> = webworker!(sort_vec);
+/// # }
 /// ```
 #[macro_export]
 macro_rules! webworker {

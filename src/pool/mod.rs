@@ -92,12 +92,21 @@ impl WorkerPoolOptions {
 /// [`crate::worker_pool()`].
 ///
 /// Example usage:
-/// ```ignore
+/// ```no_run
+/// # use serde::{Serialize, Deserialize};
+/// # use wasmworker_proc_macro::webworker_fn;
+/// # #[derive(Serialize, Deserialize, PartialEq, Debug)]
+/// # struct VecType(Vec<u32>);
+/// # #[webworker_fn]
+/// # pub fn sort_vec(mut v: VecType) -> VecType { v.0.sort(); v }
 /// use wasmworker::{webworker, worker_pool};
 ///
+/// # async fn example() {
 /// let worker_pool = worker_pool().await;
 /// let res = worker_pool.run(webworker!(sort_vec), &VecType(vec![5, 2, 8])).await;
 /// assert_eq!(res.0, vec![2, 5, 8]);
+/// # }
+/// # fn main() {}
 /// ```
 pub struct WebWorkerPool {
     /// The workers that have been spawned.
