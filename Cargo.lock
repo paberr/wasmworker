@@ -524,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "wasmworker"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "futures",
  "js-sys",
@@ -562,7 +562,7 @@ dependencies = [
 
 [[package]]
 name = "wasmworker-proc-macro"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "log",
  "quote",
