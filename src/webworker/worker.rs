@@ -369,13 +369,13 @@ impl WebWorker {
             arg: to_bytes(arg),
         };
 
-        let res = self.send_request(id, request).await;
+        let res = self.send_request(id, request, port).await;
         from_bytes(&res)
     }
 
     /// Sends a request to the worker and waits for the response.
     /// This is extracted from `force_run` to reduce monomorphisation cost.
-    async fn send_request(&self, id: u32, request: Request) -> Vec<u8> {
+    async fn send_request(&self, id: u32, request: Request, port: Option<MessagePort>) -> Vec<u8> {
         // Create channel and add task.
         let (sender, receiver) = oneshot::channel();
         self.open_tasks.borrow_mut().insert(id, sender);

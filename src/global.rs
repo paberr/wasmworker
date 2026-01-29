@@ -67,10 +67,10 @@ pub async fn init_worker_pool(options: WorkerPoolOptions) -> Result<(), AlreadyI
 /// await initOptimizedWorkerPool();
 /// ```
 #[wasm_bindgen(js_name = initOptimizedWorkerPool)]
-pub async fn init_optimized_worker_pool() {
-    let mut options = WorkerPoolOptions::default();
+pub async fn init_optimized_worker_pool() -> Result<(), AlreadyInitialized> {
+    let mut options = WorkerPoolOptions::new();
     options.precompile_wasm = Some(true);
-    init_worker_pool(options).await;
+    init_worker_pool(options).await
 }
 
 /// This function accesses the default worker pool.
