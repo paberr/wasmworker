@@ -34,7 +34,8 @@ pub struct ChannelTask<R> {
 
 impl<R: DeserializeOwned> ChannelTask<R> {
     /// Create a new `ChannelTask` from a channel and a result receiver.
-    pub(crate) fn new(channel: Channel, result_rx: oneshot::Receiver<Vec<u8>>) -> Self {
+    #[doc(hidden)]
+    pub fn new(channel: Channel, result_rx: oneshot::Receiver<Vec<u8>>) -> Self {
         Self {
             channel,
             result_rx,
