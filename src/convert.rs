@@ -27,7 +27,7 @@ pub const POT_CONFIG: pot::Config = pot::Config::new().compatibility(pot::Compat
 #[cfg(feature = "codec-pot")]
 pub fn to_bytes<T: Serialize>(value: &T) -> Box<[u8]> {
     POT_CONFIG
-        .serialize(self)
+        .serialize(value)
         .expect("WebWorker serialization failed")
         .into()
 }
@@ -39,5 +39,5 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Box<[u8]> {
 pub fn from_bytes<'de, T: Deserialize<'de>>(bytes: &'de [u8]) -> T {
     POT_CONFIG
         .deserialize(bytes)
-        expect("WebWorker deserialization failed")
+        .expect("WebWorker deserialization failed")
 }
