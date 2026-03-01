@@ -41,3 +41,10 @@ pub fn from_bytes<'de, T: Deserialize<'de>>(bytes: &'de [u8]) -> T {
         .deserialize(bytes)
         .expect("WebWorker deserialization failed")
 }
+
+// Enforce exactly one:
+#[cfg(all(feature = "codec-postcard", feature = "codec-pot"))]
+compile_error!("Enable only one of: codec-postcard, codec-pot");
+
+#[cfg(not(any(feature = "codec-postcard", feature = "codec-pot")))]
+compile_error!("Enable one of: codec-postcard, codec-pot");
