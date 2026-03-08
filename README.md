@@ -13,17 +13,14 @@ In contrast to many other libraries like [wasm-bindgen-rayon](https://github.com
 - [FAQ](#faq)
 
 ## Usage
-The library consists of two crates:
-- `wasmworker`: The main crate that also offers access to the webworker, as well as the worker pool and iterator extensions.
-- `wasmworker-proc-macro`: This crate is needed to expose functions towards the web workers via the `#[webworker_fn]` macro.
 
 ### Setting up
-To use this library, include both dependencies to your `Cargo.toml`.
+To use this library, add the following dependency to your `Cargo.toml`.
+Enable the `macros` feature to get access to the `#[webworker_fn]` and `#[webworker_channel_fn]` attribute macros.
 
 ```toml
 [dependencies]
-wasmworker = "0.2"
-wasmworker-proc-macro = "0.2"
+wasmworker = { version = "0.2", features = ["macros"] }
 ```
 
 The `wasmworker` crate comes with a default feature called `serde`, which allows running any function on a web worker under the following two conditions:
@@ -59,7 +56,7 @@ This macro ensures that the functions are available to the web worker instances:
 
 ```rust,no_run
 use serde::{Deserialize, Serialize};
-use wasmworker_proc_macro::webworker_fn;
+use wasmworker::webworker_fn;
 
 /// An arbitrary type that is (de)serializable.
 #[derive(Serialize, Deserialize)]
@@ -79,7 +76,7 @@ This object describes the function to the worker and can be safely obtained via 
 
 ```rust,no_run
 # use serde::{Deserialize, Serialize};
-# use wasmworker_proc_macro::webworker_fn;
+# use wasmworker::webworker_fn;
 # #[derive(Serialize, Deserialize)]
 # pub struct VecType(Vec<u8>);
 # #[webworker_fn]
@@ -95,7 +92,7 @@ let ww_sort = webworker!(sort_vec);
 We can instantiate our own workers and run functions on them:
 ```rust,no_run
 # use serde::{Deserialize, Serialize};
-# use wasmworker_proc_macro::webworker_fn;
+# use wasmworker::webworker_fn;
 # #[derive(Serialize, Deserialize, PartialEq, Debug)]
 # pub struct VecType(Vec<u8>);
 # #[webworker_fn]
@@ -117,7 +114,7 @@ It uses a round-robin scheduler (with the second option being a load based sched
 
 ```rust,no_run
 # use serde::{Deserialize, Serialize};
-# use wasmworker_proc_macro::webworker_fn;
+# use wasmworker::webworker_fn;
 # #[derive(Serialize, Deserialize, PartialEq, Debug)]
 # pub struct VecType(Vec<u8>);
 # #[webworker_fn]
@@ -153,7 +150,7 @@ First, define an async function with the `#[webworker_channel_fn]` macro:
 
 ```rust,ignore
 use wasmworker::Channel;
-use wasmworker_proc_macro::webworker_channel_fn;
+use wasmworker::webworker_channel_fn;
 
 #[derive(Serialize, Deserialize)]
 pub struct Progress { pub percent: u8 }

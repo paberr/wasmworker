@@ -1,8 +1,8 @@
 use wasm_bindgen::throw_str;
+use wasmworker::webworker_fn;
 use wasmworker::{
     error::InitError, webworker, worker_pool, WebWorker, WebWorkerPool, WorkerPoolOptions,
 };
-use wasmworker_proc_macro::webworker_fn;
 
 use crate::js_assert_eq;
 

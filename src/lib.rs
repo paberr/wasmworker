@@ -14,6 +14,9 @@ pub use web_sys::MessagePort;
 // Re-export WebWorkerPool from pool module
 pub use pool::WebWorkerPool;
 
+#[cfg(feature = "macros")]
+pub use wasmworker_proc_macro::*;
+
 mod channel;
 mod channel_task;
 pub mod convert;
