@@ -10,6 +10,7 @@ In contrast to many other libraries like [wasm-bindgen-rayon](https://github.com
     - [Iterator extension](#iterator-extension)
     - [Async functions with channels](#async-functions-with-channels)
   - [Bundler support (Vite)](#bundler-support-vite)
+  - [Idle timeout](#idle-timeout)
 - [FAQ](#faq)
 
 ## Usage
@@ -20,7 +21,7 @@ Enable the `macros` feature to get access to the `#[webworker_fn]` and `#[webwor
 
 ```toml
 [dependencies]
-wasmworker = { version = "0.2", features = ["macros"] }
+wasmworker = { version = "0.3", features = ["macros"] }
 ```
 
 The `wasmworker` crate comes with a default feature called `serde`, which allows running any function on a web worker under the following two conditions:
@@ -251,6 +252,20 @@ let mut options = WorkerPoolOptions::new();
 options.precompile_wasm = Some(true);
 init_worker_pool(options).await.unwrap();
 ```
+
+### Idle timeout
+
+Workers can be automatically terminated after a period of inactivity and transparently recreated when new tasks arrive. This is useful for freeing resources in applications where worker usage is intermittent:
+
+```rust
+use wasmworker::{init_worker_pool, WorkerPoolOptions};
+
+let mut options = WorkerPoolOptions::new();
+options.idle_timeout_ms = Some(5000); // Terminate idle workers after 5 seconds
+init_worker_pool(options).await.unwrap();
+```
+
+You can inspect the pool state using `num_active_workers()` to see how many workers are currently alive.
 
 ## FAQ
 1. _Why would you not want to use SharedArrayBuffers?_
