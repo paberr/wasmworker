@@ -19,7 +19,7 @@ pub fn from_bytes<'de, T: Deserialize<'de>>(bytes: &'de [u8]) -> T {
 }
 
 #[cfg(feature = "codec-pot")]
-pub const POT_CONFIG: pot::Config = pot::Config::new().compatibility(pot::Compatibility::V4);
+const POT_CONFIG: pot::Config = pot::Config::new().compatibility(pot::Compatibility::V4);
 
 /// This wrapper function encapsulates our internal serialization format.
 /// It is used internally to prepare values before sending them to a worker
