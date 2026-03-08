@@ -1,4 +1,11 @@
 # wasmworker
+
+[![Crates.io](https://img.shields.io/crates/v/wasmworker)](https://crates.io/crates/wasmworker)
+[![docs.rs](https://img.shields.io/docsrs/wasmworker)](https://docs.rs/wasmworker)
+[![CI](https://github.com/paberr/wasmworker/actions/workflows/test.yml/badge.svg)](https://github.com/paberr/wasmworker/actions/workflows/test.yml)
+[![Crates.io Downloads](https://img.shields.io/crates/d/wasmworker)](https://crates.io/crates/wasmworker)
+[![License](https://img.shields.io/crates/l/wasmworker)](https://github.com/paberr/wasmworker#license)
+
 `wasmworker` is a library that provides easy access to parallelization on web targets when compiled to WebAssembly using [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen).
 In contrast to many other libraries like [wasm-bindgen-rayon](https://github.com/RReverser/wasm-bindgen-rayon), this library does not require SharedArrayBuffer support.
 
