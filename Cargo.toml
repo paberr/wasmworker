@@ -11,7 +11,7 @@ readme = "README.md"
 keywords = ["webworker", "parallelism", "wasm"]
 
 [workspace.dependencies]
-wasmworker = { version = "0.3", path = ".", features = ["serde", "macros"] }
+wasmworker = { version = "0.3", path = ".", features = ["iter-ext", "macros"] }
 wasmworker-proc-macro = { version = "0.3", path = "proc-macro" }
 
 [package]
@@ -64,8 +64,8 @@ version = "0.3"
 wasmworker-proc-macro = { workspace = true }
 
 [features]
-default = ["serde", "codec-postcard"]
-serde = []
+default = ["iter-ext", "codec-postcard"]
+iter-ext = []
 codec-postcard = ["dep:postcard"]
 codec-pot = ["dep:pot"]
 macros = ["wasmworker-proc-macro"]

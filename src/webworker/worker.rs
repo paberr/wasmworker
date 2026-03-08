@@ -295,7 +295,7 @@ impl WebWorker {
 
     /// This function can outsource a task on a [`WebWorker`] which has `Box<[u8]>` both as input and output.
     /// (De)serialization of values needs to be handled by the caller.
-    /// For more convenient access, make sure the `serde` feature is enabled and use [`WebWorker::run`].
+    /// For more convenient access, use [`WebWorker::run`] instead.
     ///
     /// The `func`: [`WebWorkerFn`] argument should normally be instantiated using the [`crate::webworker!`] macro.
     /// This ensures type safety and that the function is correctly exposed to the worker.
@@ -318,7 +318,7 @@ impl WebWorker {
     /// This function differs from [`WebWorker::run_bytes`] by returning early if the given task limit is reached.
     /// In this case a [`Full`] error is returned.
     /// (De)serialization of values needs to be handled by the caller.
-    /// For more convenient access, make sure the `serde` feature is enabled and use [`WebWorker::try_run`].
+    /// For more convenient access, use [`WebWorker::try_run`] instead.
     ///
     /// The `func`: [`WebWorkerFn`] argument should normally be instantiated using the [`crate::webworker!`] macro.
     /// This ensures type safety and that the function is correctly exposed to the worker.

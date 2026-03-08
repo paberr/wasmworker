@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        features: ["--all-features", "--no-default-features --features serde,codec-pot"]
+        features: ["--all-features", "--no-default-features --features iter-ext,codec-pot"]
 
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        features: ["--all-features", "--no-default-features --features serde,macros,codec-pot"]
+        features: ["--all-features", "--no-default-features --features iter-ext,macros,codec-pot"]
 
     steps:
       - uses: actions/checkout@v4

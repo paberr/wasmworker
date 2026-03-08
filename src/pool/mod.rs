@@ -318,7 +318,7 @@ impl WebWorkerPool {
 
     /// This function can outsource a task on a [`WebWorkerPool`] which has `Box<[u8]>` both as input and output.
     /// (De)serialization of values needs to be handled by the caller.
-    /// For more convenient access, make sure the `serde` feature is enabled and use [`WebWorkerPool::run`].
+    /// For more convenient access, use [`WebWorkerPool::run`] instead.
     ///
     /// The `func`: [`WebWorkerFn`] argument should normally be instantiated using the [`crate::webworker!`] macro.
     /// This ensures type safety and that the function is correctly exposed to the worker.

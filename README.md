@@ -32,12 +32,10 @@ Enable the `macros` feature to get access to the `#[webworker_fn]` and `#[webwor
 wasmworker = { version = "0.3", features = ["macros"] }
 ```
 
-The `wasmworker` crate comes with a default feature called `serde`, which allows running any function on a web worker under the following two conditions:
-1. The function takes a single argument, which implements `serde::Serialize + serde::Deserialize<'de>`.
-2. The return type implements `serde::Serialize + serde::Deserialize<'de>`.
+Function arguments and return types must implement `serde::Serialize + serde::Deserialize<'de>`.
+Alternatively, functions with the type `fn(Box<[u8]>) -> Box<[u8]>` can be used via `run_bytes()` for manual serialization.
 
-Without the `serde` feature, only functions with the type `fn(Box<[u8]>) -> Box<[u8]>` can be run on a worker.
-This is useful for users that do not want a direct serde dependency. Internally, the library always uses serde, though.
+The `iter-ext` feature (enabled by default) adds the `par_map` and `try_par_map` iterator extensions for convenient parallel map operations on the default worker pool.
 
 #### Serialization codec
 By default, `wasmworker` uses [postcard](https://crates.io/crates/postcard) for internal serialization.
@@ -48,7 +46,7 @@ Note that pot has significantly higher serialization overhead and larger output 
 
 ```toml
 [dependencies]
-wasmworker = { version = "0.3", default-features = false, features = ["serde", "macros", "codec-pot"] }
+wasmworker = { version = "0.3", default-features = false, features = ["iter-ext", "macros", "codec-pot"] }
 ```
 
 You can then start using the library without further setup.

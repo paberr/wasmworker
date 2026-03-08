@@ -118,7 +118,7 @@ pub mod convert;
 pub mod error;
 pub mod func;
 mod global;
-#[cfg(feature = "serde")]
+#[cfg(feature = "iter-ext")]
 pub mod iter_ext;
 pub mod pool;
 mod webworker;
