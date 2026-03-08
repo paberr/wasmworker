@@ -11,6 +11,7 @@ In contrast to many other libraries like [wasm-bindgen-rayon](https://github.com
 
 - [Usage](#usage)
   - [Setting up](#setting-up)
+    - [Serialization codec](#serialization-codec)
   - [Outsourcing tasks](#outsourcing-tasks)
     - [WebWorker](#webworker)
     - [WebWorkerPool](#webworkerpool)
@@ -37,6 +38,18 @@ The `wasmworker` crate comes with a default feature called `serde`, which allows
 
 Without the `serde` feature, only functions with the type `fn(Box<[u8]>) -> Box<[u8]>` can be run on a worker.
 This is useful for users that do not want a direct serde dependency. Internally, the library always uses serde, though.
+
+#### Serialization codec
+By default, `wasmworker` uses [postcard](https://crates.io/crates/postcard) for internal serialization.
+Postcard is compact and fast, making it ideal for the typical WebWorker use case (passing `Vec<T>`, structs, primitives).
+
+For complex types like `Rc<T>` or cyclic structures, you can use [pot](https://crates.io/crates/pot) instead.
+Note that pot has significantly higher serialization overhead and larger output sizes, so it should only be used when postcard cannot handle your data types.
+
+```toml
+[dependencies]
+wasmworker = { version = "0.3", default-features = false, features = ["serde", "macros", "codec-pot"] }
+```
 
 You can then start using the library without further setup.
 If you plan on using the global `WebWorkerPool` (using the iterator extensions or `worker_pool()`), you can *optionally* configure this pool:
