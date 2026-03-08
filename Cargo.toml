@@ -11,7 +11,7 @@ readme = "README.md"
 keywords = ["webworker", "parallelism", "wasm"]
 
 [workspace.dependencies]
-wasmworker = { version = "0.3", path = ".", features = ["iter-ext", "macros"] }
+wasmworker = { version = "0.3", path = ".", default-features = false, features = ["iter-ext", "macros"] }
 wasmworker-proc-macro = { version = "0.3", path = "proc-macro" }
 
 [package]

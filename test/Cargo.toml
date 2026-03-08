@@ -23,3 +23,8 @@ js-sys = "0.3"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["MessagePort", "Window"] }
 wasmworker = { workspace = true }
+
+[features]
+default = ["codec-postcard"]
+codec-postcard = ["wasmworker/codec-postcard"]
+codec-pot = ["wasmworker/codec-pot"]
