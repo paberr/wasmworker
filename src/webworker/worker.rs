@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::HashMap,
     rc::Rc,
     sync::atomic::{AtomicU32, Ordering},
@@ -60,6 +60,8 @@ pub struct WebWorker {
     open_tasks: Rc<RefCell<HashMap<u32, oneshot::Sender<Response>>>>,
     /// The callback handle for the worker.
     _callback: Closure<Callback>,
+    /// Timestamp (ms since epoch) of the last completed task, used for idle timeout tracking.
+    last_active: Rc<Cell<f64>>,
 }
 
 impl WebWorker {
@@ -182,8 +184,9 @@ impl WebWorker {
         }
 
         let tasks = Rc::new(RefCell::new(HashMap::new()));
+        let last_active = Rc::new(Cell::new(js_sys::Date::now()));
 
-        let callback_handle = Self::callback(Rc::clone(&tasks));
+        let callback_handle = Self::callback(Rc::clone(&tasks), Rc::clone(&last_active));
         worker.set_onmessage(Some(callback_handle.as_ref().unchecked_ref()));
 
         Ok(WebWorker {
@@ -192,12 +195,14 @@ impl WebWorker {
             current_task: AtomicU32::new(0),
             open_tasks: tasks,
             _callback: callback_handle,
+            last_active,
         })
     }
 
     /// Function to be called when a result is ready.
     fn callback(
         tasks: Rc<RefCell<HashMap<u32, oneshot::Sender<Response>>>>,
+        last_active: Rc<Cell<f64>>,
     ) -> Closure<dyn FnMut(MessageEvent)> {
         Closure::new(move |event: MessageEvent| {
             let data = event.data();
@@ -210,6 +215,9 @@ impl WebWorker {
                 // Ignore if receiver is already closed.
                 let _ = channel.send(response);
             }
+
+            // Update idle tracking timestamp.
+            last_active.set(js_sys::Date::now());
         })
     }
 
@@ -515,6 +523,12 @@ impl WebWorker {
     /// Return the number of tasks currently queued to this worker.
     pub fn current_load(&self) -> usize {
         self.open_tasks.borrow().len()
+    }
+
+    /// Return the timestamp (ms since epoch) of the last completed task.
+    /// Used for idle timeout tracking.
+    pub fn last_active(&self) -> f64 {
+        self.last_active.get()
     }
 }
 
