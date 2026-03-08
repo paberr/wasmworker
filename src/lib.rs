@@ -11,7 +11,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! wasmworker = { version = "0.2", features = ["macros"] }
+//! wasmworker = { version = "0.4", features = ["macros"] }
 //! ```
 //!
 //! ### Defining worker functions

@@ -29,7 +29,7 @@ Enable the `macros` feature to get access to the `#[webworker_fn]` and `#[webwor
 
 ```toml
 [dependencies]
-wasmworker = { version = "0.3", features = ["macros"] }
+wasmworker = { version = "0.4", features = ["macros"] }
 ```
 
 Function arguments and return types must implement `serde::Serialize + serde::Deserialize<'de>`.
@@ -46,7 +46,7 @@ Note that pot has significantly higher serialization overhead and larger output 
 
 ```toml
 [dependencies]
-wasmworker = { version = "0.3", default-features = false, features = ["iter-ext", "macros", "codec-pot"] }
+wasmworker = { version = "0.4", default-features = false, features = ["iter-ext", "macros", "codec-pot"] }
 ```
 
 You can then start using the library without further setup.
