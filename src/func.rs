@@ -13,6 +13,7 @@ pub struct WebWorkerFn<T, R> {
     /// The worker will automatically add the `__webworker_` prefix.
     pub(crate) name: &'static str,
     /// The original function, which can be used as a fallback.
+    #[cfg_attr(not(feature = "iter-ext"), allow(dead_code))]
     pub(crate) func: fn(T) -> R,
 }
 
