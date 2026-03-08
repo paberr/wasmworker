@@ -1,6 +1,9 @@
 name: Test
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 jobs:
   rustfmt:
@@ -17,7 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        features: ["--all-features", "--no-default-features --features iter-ext,codec-pot"]
+        include:
+          - codec: postcard
+            features: "--all-features"
+          - codec: pot
+            features: "--no-default-features --features iter-ext,codec-pot"
+    name: clippy (${{ matrix.codec }})
 
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +39,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        features: ["--all-features", "--no-default-features --features iter-ext,macros,codec-pot"]
+        include:
+          - codec: postcard
+            features: "--all-features"
+          - codec: pot
+            features: "--no-default-features --features iter-ext,macros,codec-pot"
+    name: doc-test (${{ matrix.codec }})
 
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +55,14 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - codec: postcard
+            script: "npm test"
+          - codec: pot
+            script: "npm run test:pot"
+    name: test (${{ matrix.codec }})
 
     steps:
       - uses: actions/checkout@v4
@@ -52,4 +73,4 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Run tests
         working-directory: ./test
-        run: npm test
+        run: ${{ matrix.script }}
