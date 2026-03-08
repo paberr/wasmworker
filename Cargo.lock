@@ -556,7 +556,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasmworker",
- "wasmworker-proc-macro",
  "web-sys",
 ]
 
@@ -578,7 +577,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasmworker",
- "wasmworker-proc-macro",
  "web-sys",
 ]
 

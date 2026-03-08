@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
+use wasmworker::webworker_channel_fn;
 use wasmworker::{webworker_channel, worker_pool, Channel, WebWorker};
-use wasmworker_proc_macro::webworker_channel_fn;
 
 use crate::js_assert_eq;
 

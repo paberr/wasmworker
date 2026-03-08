@@ -11,7 +11,7 @@ readme = "README.md"
 keywords = ["webworker", "parallelism", "wasm"]
 
 [workspace.dependencies]
-wasmworker = { version = "0.2", path = ".", features = ["serde"] }
+wasmworker = { version = "0.2", path = ".", features = ["serde", "macros"] }
 wasmworker-proc-macro = { version = "0.2", path = "proc-macro" }
 
 [package]
@@ -65,3 +65,8 @@ wasmworker-proc-macro = { workspace = true }
 [features]
 default = ["serde"]
 serde = []
+macros = ["wasmworker-proc-macro"]
+
+[dependencies.wasmworker-proc-macro]
+workspace = true
+optional = true

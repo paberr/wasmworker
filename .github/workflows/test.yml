@@ -32,7 +32,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run doctest
-        run: cargo test --doc
+        run: cargo test --doc --all-features
 
   test:
     runs-on: ubuntu-latest
