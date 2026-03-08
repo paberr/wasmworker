@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 /// This wrapper function encapsulates our internal serialization format.
 /// It is used internally to prepare values before sending them to a worker
 /// or back to the main thread via `postMessage`.
-#[cfg(feature = "codec-postcard")]
+#[cfg(not(feature = "codec-pot"))]
 pub fn to_bytes<T: Serialize>(value: &T) -> Box<[u8]> {
     postcard::to_allocvec(value)
         .expect("WebWorker serialization failed")
@@ -13,7 +13,7 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Box<[u8]> {
 /// This wrapper function encapsulates our internal serialization format.
 /// It is used internally to prepare values after receiving them from a worker
 /// or the main thread via `postMessage`.
-#[cfg(feature = "codec-postcard")]
+#[cfg(not(feature = "codec-pot"))]
 pub fn from_bytes<'de, T: Deserialize<'de>>(bytes: &'de [u8]) -> T {
     postcard::from_bytes(bytes).expect("WebWorker deserialization failed")
 }
@@ -41,10 +41,3 @@ pub fn from_bytes<'de, T: Deserialize<'de>>(bytes: &'de [u8]) -> T {
         .deserialize(bytes)
         .expect("WebWorker deserialization failed")
 }
-
-// Enforce exactly one:
-#[cfg(all(feature = "codec-postcard", feature = "codec-pot"))]
-compile_error!("Enable only one of: codec-postcard, codec-pot");
-
-#[cfg(not(any(feature = "codec-postcard", feature = "codec-pot")))]
-compile_error!("Enable one of: codec-postcard, codec-pot");
