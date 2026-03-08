@@ -43,4 +43,7 @@ pub async fn run_tests() {
     // Pool configuration tests
     can_use_precompiled_wasm().await;
     can_use_custom_pool_options().await;
+
+    // Idle timeout test
+    can_use_idle_timeout().await;
 }

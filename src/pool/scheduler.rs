@@ -1,8 +1,6 @@
 use std::cell::Cell;
 
-use wasm_bindgen::{prelude::wasm_bindgen, UnwrapThrowExt};
-
-use super::WebWorkerPool;
+use wasm_bindgen::prelude::wasm_bindgen;
 
 /// This enumeration contains the supported strategies for distributing
 /// tasks within the worker pool.
@@ -46,26 +44,30 @@ impl Scheduler {
         }
     }
 
-    /// Given the pool, apply the strategy and determine which worker
-    /// should receive the next task.
-    pub(super) fn schedule(&self, pool: &WebWorkerPool) -> usize {
+    /// Given per-slot loads, apply the strategy and determine which worker
+    /// should receive the next task. Returns `None` if no active workers exist.
+    ///
+    /// Each entry in `loads` is `Some(current_load)` for active workers,
+    /// or `None` for terminated/creating slots.
+    pub(super) fn schedule(&self, loads: &[Option<usize>]) -> Option<usize> {
         match self.strategy {
             Strategy::RoundRobin => {
-                // Simply return the current worker and increment.
-                let worker_id = self.current_worker.get();
-                self.current_worker
-                    .set((worker_id + 1) % pool.num_workers());
-                worker_id
+                let num = loads.len();
+                for _ in 0..num {
+                    let id = self.current_worker.get();
+                    self.current_worker.set((id + 1) % num);
+                    if loads[id].is_some() {
+                        return Some(id);
+                    }
+                }
+                None
             }
-            Strategy::LoadBased => {
-                // Choose the worker with the minimum work load.
-                pool.workers
-                    .iter()
-                    .enumerate()
-                    .min_by_key(|(_id, worker)| worker.current_load())
-                    .expect_throw("WorkerPool does not have workers")
-                    .0
-            }
+            Strategy::LoadBased => loads
+                .iter()
+                .enumerate()
+                .filter_map(|(i, load)| load.map(|l| (i, l)))
+                .min_by_key(|(_i, load)| *load)
+                .map(|(i, _)| i),
         }
     }
 }
