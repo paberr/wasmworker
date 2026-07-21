@@ -51,6 +51,12 @@ type Callback = dyn FnMut(MessageEvent);
 pub struct WebWorker {
     /// The underlying web worker.
     worker: Worker,
+    /// The dedicated port for all wasmworker traffic (init handshake and
+    /// task dispatch). Using a `MessageChannel` instead of the worker's
+    /// global message channel keeps the latter free for the embedded module,
+    /// so message handlers installed by module code never interfere with
+    /// task dispatch and vice versa.
+    port: MessagePort,
     /// An optional limit on the number of tasks queued at the same time.
     task_limit: Option<Semaphore>,
     /// The current task id, which is used to reidentify responses.
@@ -146,9 +152,17 @@ impl WebWorker {
         let worker = Worker::new_with_options(&script_url, &worker_options)
             .map_err(InitError::WebWorkerCreation)?;
 
-        // Send pre-compiled WASM module if provided
+        // Create the dedicated channel for all wasmworker traffic. One port
+        // stays on the main thread, the other is transferred to the worker
+        // with the init message.
+        let channel = MessageChannel::new().map_err(InitError::ChannelCreation)?;
+        let port = channel.port1();
+        let worker_port = channel.port2();
+
+        // Send the init message with the task port
+        // (and the pre-compiled WASM module if provided).
+        let init_msg = js_sys::Object::new();
         if let Some(module) = wasm_module {
-            let init_msg = js_sys::Object::new();
             js_sys::Reflect::set(
                 &init_msg,
                 &JsValue::from_str("type"),
@@ -157,11 +171,20 @@ impl WebWorker {
             .expect_throw("Could not set type");
             js_sys::Reflect::set(&init_msg, &JsValue::from_str("module"), &module)
                 .expect_throw("Could not set module");
-
-            worker
-                .post_message(&init_msg)
-                .expect_throw("Could not send WASM module to worker");
+        } else {
+            js_sys::Reflect::set(
+                &init_msg,
+                &JsValue::from_str("type"),
+                &JsValue::from_str("init_port"),
+            )
+            .expect_throw("Could not set type");
         }
+
+        let transfer = Array::new();
+        transfer.push(&worker_port);
+        worker
+            .post_message_with_transfer(&init_msg, &transfer)
+            .expect_throw("Could not send init message to worker");
 
         // Wait until worker is initialized.
         let (tx, rx) = oneshot::channel();
@@ -171,7 +194,7 @@ impl WebWorker {
                 .expect_throw("Error deserializing post init data");
             let _ = tx.send(post_init);
         });
-        worker.set_onmessage(Some(handler.as_ref().unchecked_ref()));
+        port.set_onmessage(Some(handler.as_ref().unchecked_ref()));
         let post_init = rx.await.expect_throw("WebWorker init sender dropped");
 
         // Handle errors in webworker init
@@ -187,10 +210,11 @@ impl WebWorker {
         let last_active = Rc::new(Cell::new(js_sys::Date::now()));
 
         let callback_handle = Self::callback(Rc::clone(&tasks), Rc::clone(&last_active));
-        worker.set_onmessage(Some(callback_handle.as_ref().unchecked_ref()));
+        port.set_onmessage(Some(callback_handle.as_ref().unchecked_ref()));
 
         Ok(WebWorker {
             worker,
+            port,
             task_limit: task_limit.map(|limit| Semaphore::new(limit)),
             current_task: AtomicU32::new(0),
             open_tasks: tasks,
@@ -447,15 +471,15 @@ impl WebWorker {
             let transfer = Array::new();
             transfer.push(&port);
 
-            self.worker
-                .post_message_with_transfer(
+            self.port
+                .post_message_with_transferable(
                     &serde_wasm_bindgen::to_value(&request)
                         .expect_throw("Could not serialize request"),
                     &transfer,
                 )
                 .expect_throw("WebWorker gone");
         } else {
-            self.worker
+            self.port
                 .post_message(
                     &serde_wasm_bindgen::to_value(&request)
                         .expect_throw("Could not serialize request"),
@@ -497,8 +521,8 @@ impl WebWorker {
         let transfer = Array::new();
         transfer.push(&port);
 
-        self.worker
-            .post_message_with_transfer(
+        self.port
+            .post_message_with_transferable(
                 &serde_wasm_bindgen::to_value(&request).expect_throw("Could not serialize request"),
                 &transfer,
             )
@@ -534,6 +558,7 @@ impl WebWorker {
 
 impl Drop for WebWorker {
     fn drop(&mut self) {
+        self.port.close();
         self.worker.terminate();
     }
 }

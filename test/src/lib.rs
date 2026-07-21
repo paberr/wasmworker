@@ -1,10 +1,12 @@
 use channel::*;
 use convert::*;
+use onmessage::*;
 use raw::*;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 pub(crate) mod channel;
 pub(crate) mod convert;
+pub(crate) mod onmessage;
 pub(crate) mod raw;
 
 #[macro_export]
@@ -46,4 +48,7 @@ pub async fn run_tests() {
 
     // Idle timeout test
     can_use_idle_timeout().await;
+
+    // Conflicting onmessage regression test
+    can_run_task_with_conflicting_onmessage().await;
 }
