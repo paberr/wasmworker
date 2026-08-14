@@ -118,11 +118,19 @@ impl WorkerPoolOptions {
 /// The state of a single worker slot in the pool.
 enum WorkerSlot {
     /// Worker is active and can accept tasks.
-    Active(WebWorker),
+    Active {
+        worker: Rc<WebWorker>,
+        generation: u64,
+    },
+    /// Worker is exclusively leased to a channel task.
+    Leased {
+        worker: Rc<WebWorker>,
+        generation: u64,
+    },
     /// Worker is being created (prevents duplicate creation during async init).
-    Creating,
+    Creating { generation: u64 },
     /// Worker was terminated by idle timeout and can be recreated.
-    Empty,
+    Empty { generation: u64 },
 }
 
 pub struct WebWorkerPool {
@@ -143,7 +151,7 @@ pub struct WebWorkerPool {
     /// Idle checker interval ID (for clearInterval on Drop).
     _idle_checker_id: Option<i32>,
     /// Notify waiting tasks when a worker becomes available after creation.
-    worker_ready: tokio::sync::Notify,
+    worker_ready: Rc<tokio::sync::Notify>,
 }
 
 impl Drop for WebWorkerPool {
@@ -225,7 +233,12 @@ impl WebWorkerPool {
         let slots: Rc<Vec<RefCell<WorkerSlot>>> = Rc::new(
             workers
                 .into_iter()
-                .map(|w| RefCell::new(WorkerSlot::Active(w)))
+                .map(|worker| {
+                    RefCell::new(WorkerSlot::Active {
+                        worker: Rc::new(worker),
+                        generation: 0,
+                    })
+                })
                 .collect(),
         );
 
@@ -237,11 +250,16 @@ impl WebWorkerPool {
                 for i in 0..slots_clone.len() {
                     let should_terminate = {
                         let s = slots_clone[i].borrow();
-                        matches!(&*s, WorkerSlot::Active(ref w)
-                            if w.current_load() == 0 && (now - w.last_active()) >= timeout as f64)
+                        matches!(&*s, WorkerSlot::Active { worker, .. }
+                            if worker.current_load() == 0
+                                && (now - worker.last_active()) >= timeout as f64)
                     };
                     if should_terminate {
-                        *slots_clone[i].borrow_mut() = WorkerSlot::Empty;
+                        let generation = match &*slots_clone[i].borrow() {
+                            WorkerSlot::Active { generation, .. } => generation + 1,
+                            _ => continue,
+                        };
+                        *slots_clone[i].borrow_mut() = WorkerSlot::Empty { generation };
                     }
                 }
             });
@@ -266,7 +284,7 @@ impl WebWorkerPool {
             pool_path_bg: options.path_bg.clone(),
             _idle_checker_cb: idle_checker_cb,
             _idle_checker_id: idle_checker_id,
-            worker_ready: tokio::sync::Notify::new(),
+            worker_ready: Rc::new(tokio::sync::Notify::new()),
         })
     }
 
@@ -306,7 +324,7 @@ impl WebWorkerPool {
     ///
     /// let progress: Progress = task.recv().await.expect("progress");
     /// task.send(&Continue { should_continue: true });
-    /// let result: ProcessResult = task.result().await;
+    /// let result: ProcessResult = task.result().await.expect("worker terminated");
     /// ```
     pub async fn run_channel<T, R>(&self, func: WebWorkerChannelFn<T, R>, arg: &T) -> ChannelTask<R>
     where
@@ -338,45 +356,58 @@ impl WebWorkerPool {
     /// Acquires an active worker slot, recreating a terminated worker if needed.
     async fn acquire_worker(&self) -> usize {
         loop {
+            let notified = self.worker_ready.notified();
             let loads = self.compute_loads();
             if let Some(id) = self.scheduler.schedule(&loads) {
                 return id;
             }
 
-            // No active workers. Find first Empty slot and recreate.
-            let empty_slot = self
-                .slots
-                .iter()
-                .position(|slot| matches!(&*slot.borrow(), WorkerSlot::Empty));
-            if let Some(i) = empty_slot {
-                *self.slots[i].borrow_mut() = WorkerSlot::Creating;
+            if self.recreate_empty_worker().await {
+                continue;
             }
 
-            if let Some(slot_id) = empty_slot {
-                let worker_result = WebWorker::with_path_and_module(
-                    self.pool_path.as_deref(),
-                    self.pool_path_bg.as_deref(),
-                    None,
-                    self.wasm_module.clone(),
-                )
-                .await;
-                match worker_result {
-                    Ok(worker) => {
-                        *self.slots[slot_id].borrow_mut() = WorkerSlot::Active(worker);
-                        self.worker_ready.notify_waiters();
-                        return slot_id;
-                    }
-                    Err(_) => {
-                        *self.slots[slot_id].borrow_mut() = WorkerSlot::Empty;
-                        self.worker_ready.notify_waiters();
-                        panic!("Couldn't recreate worker");
-                    }
-                }
-            }
-
-            // All slots are Creating — wait for one to finish.
-            self.worker_ready.notified().await;
+            // All slots are leased, busy, or being created.
+            notified.await;
         }
+    }
+
+    /// Recreate one empty worker slot. Returns whether an empty slot was found.
+    async fn recreate_empty_worker(&self) -> bool {
+        let empty_slot =
+            self.slots
+                .iter()
+                .enumerate()
+                .find_map(|(i, slot)| match &*slot.borrow() {
+                    WorkerSlot::Empty { generation } => Some((i, *generation)),
+                    _ => None,
+                });
+        let Some((slot_id, generation)) = empty_slot else {
+            return false;
+        };
+
+        *self.slots[slot_id].borrow_mut() = WorkerSlot::Creating { generation };
+        let worker_result = WebWorker::with_path_and_module(
+            self.pool_path.as_deref(),
+            self.pool_path_bg.as_deref(),
+            None,
+            self.wasm_module.clone(),
+        )
+        .await;
+        match worker_result {
+            Ok(worker) => {
+                *self.slots[slot_id].borrow_mut() = WorkerSlot::Active {
+                    worker: Rc::new(worker),
+                    generation,
+                };
+                self.worker_ready.notify_waiters();
+            }
+            Err(_) => {
+                *self.slots[slot_id].borrow_mut() = WorkerSlot::Empty { generation };
+                self.worker_ready.notify_waiters();
+                panic!("Couldn't recreate worker");
+            }
+        }
+        true
     }
 
     /// Compute per-slot loads for the scheduler.
@@ -384,17 +415,48 @@ impl WebWorkerPool {
         self.slots
             .iter()
             .map(|slot| match &*slot.borrow() {
-                WorkerSlot::Active(w) => Some(w.current_load()),
+                WorkerSlot::Active { worker, .. } => Some(worker.current_load()),
                 _ => None,
             })
             .collect()
     }
 
+    /// Acquires an idle worker and exclusively leases its slot to a channel task.
+    async fn acquire_channel_worker(&self) -> (usize, Rc<WebWorker>, u64) {
+        loop {
+            let notified = self.worker_ready.notified();
+            let loads = self
+                .slots
+                .iter()
+                .map(|slot| match &*slot.borrow() {
+                    WorkerSlot::Active { worker, .. } if worker.current_load() == 0 => Some(0),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            if let Some(slot_id) = self.scheduler.schedule(&loads) {
+                let mut slot = self.slots[slot_id].borrow_mut();
+                if let WorkerSlot::Active { worker, generation } = &*slot {
+                    let worker = Rc::clone(worker);
+                    let generation = *generation;
+                    *slot = WorkerSlot::Leased {
+                        worker: Rc::clone(&worker),
+                        generation,
+                    };
+                    return (slot_id, worker, generation);
+                }
+            }
+
+            if self.recreate_empty_worker().await {
+                continue;
+            }
+
+            notified.await;
+        }
+    }
+
     /// Determines the worker to run a simple task on using the scheduler
     /// and runs the task.
-    // Per-slot RefCell: holding a borrow across await is safe because
-    // the idle checker only terminates slots with zero load (i.e., not borrowed).
-    #[allow(clippy::await_holding_refcell_ref)]
     pub(crate) async fn run_internal<T, R, A>(&self, func: WebWorkerFn<T, R>, arg: A) -> R
     where
         A: Borrow<T>,
@@ -402,18 +464,17 @@ impl WebWorkerPool {
         R: Serialize + for<'de> Deserialize<'de>,
     {
         let worker_id = self.acquire_worker().await;
-        let slot = self.slots[worker_id].borrow();
-        match &*slot {
-            WorkerSlot::Active(worker) => worker.run_internal(func, arg.borrow()).await,
+        let worker = match &*self.slots[worker_id].borrow() {
+            WorkerSlot::Active { worker, .. } => Rc::clone(worker),
             _ => unreachable!("acquire_worker guarantees Active slot"),
-        }
+        };
+        let result = worker.run_internal(func, arg.borrow()).await;
+        self.worker_ready.notify_waiters();
+        result
     }
 
     /// Determines the worker to run a channel task on using the scheduler
     /// and runs the task.
-    // Per-slot RefCell: holding a borrow across await is safe because
-    // the idle checker only terminates slots with zero load (i.e., not borrowed).
-    #[allow(clippy::await_holding_refcell_ref)]
     pub(crate) async fn run_channel_internal<T, R>(
         &self,
         func: WebWorkerChannelFn<T, R>,
@@ -423,12 +484,73 @@ impl WebWorkerPool {
         T: Serialize + for<'de> Deserialize<'de>,
         R: Serialize + for<'de> Deserialize<'de>,
     {
-        let worker_id = self.acquire_worker().await;
-        let slot = self.slots[worker_id].borrow();
-        match &*slot {
-            WorkerSlot::Active(worker) => worker.run_channel_internal(func, arg).await,
-            _ => unreachable!("acquire_worker guarantees Active slot"),
-        }
+        let (worker_id, worker, generation) = self.acquire_channel_worker().await;
+        let task = worker.run_channel_internal(func, arg).await;
+
+        let release_slots = Rc::clone(&self.slots);
+        let release_ready = Rc::clone(&self.worker_ready);
+        let release_worker = Rc::clone(&worker);
+        let on_complete = Box::new(move || {
+            let mut slot = release_slots[worker_id].borrow_mut();
+            if matches!(&*slot, WorkerSlot::Leased { generation: current, .. } if *current == generation)
+            {
+                *slot = WorkerSlot::Active {
+                    worker: release_worker,
+                    generation,
+                };
+                release_ready.notify_waiters();
+            }
+        });
+
+        let terminate_slots = Rc::clone(&self.slots);
+        let terminate_ready = Rc::clone(&self.worker_ready);
+        let terminate_path = self.pool_path.clone();
+        let terminate_path_bg = self.pool_path_bg.clone();
+        let terminate_module = self.wasm_module.clone();
+        let on_terminate = Box::new(move || {
+            let replacement_generation = generation + 1;
+            {
+                let mut slot = terminate_slots[worker_id].borrow_mut();
+                if !matches!(&*slot, WorkerSlot::Leased { generation: current, .. } if *current == generation)
+                {
+                    return;
+                }
+                *slot = WorkerSlot::Creating {
+                    generation: replacement_generation,
+                };
+            }
+
+            worker.terminate();
+            let slots = Rc::clone(&terminate_slots);
+            let ready = Rc::clone(&terminate_ready);
+            wasm_bindgen_futures::spawn_local(async move {
+                let replacement = WebWorker::with_path_and_module(
+                    terminate_path.as_deref(),
+                    terminate_path_bg.as_deref(),
+                    None,
+                    terminate_module,
+                )
+                .await;
+
+                let mut slot = slots[worker_id].borrow_mut();
+                if !matches!(&*slot, WorkerSlot::Creating { generation } if *generation == replacement_generation)
+                {
+                    return;
+                }
+                *slot = match replacement {
+                    Ok(worker) => WorkerSlot::Active {
+                        worker: Rc::new(worker),
+                        generation: replacement_generation,
+                    },
+                    Err(_) => WorkerSlot::Empty {
+                        generation: replacement_generation,
+                    },
+                };
+                ready.notify_waiters();
+            });
+        });
+
+        task.with_callbacks(on_complete, on_terminate)
     }
 
     /// Return the number of tasks currently queued to this worker pool.
@@ -436,8 +558,10 @@ impl WebWorkerPool {
         self.slots
             .iter()
             .map(|slot| match &*slot.borrow() {
-                WorkerSlot::Active(w) => w.current_load(),
-                _ => 0,
+                WorkerSlot::Active { worker, .. } | WorkerSlot::Leased { worker, .. } => {
+                    worker.current_load()
+                }
+                WorkerSlot::Creating { .. } | WorkerSlot::Empty { .. } => 0,
             })
             .sum()
     }
@@ -451,7 +575,12 @@ impl WebWorkerPool {
     pub fn num_active_workers(&self) -> usize {
         self.slots
             .iter()
-            .filter(|s| matches!(&*RefCell::borrow(s), WorkerSlot::Active(_)))
+            .filter(|s| {
+                matches!(
+                    &*RefCell::borrow(s),
+                    WorkerSlot::Active { .. } | WorkerSlot::Leased { .. }
+                )
+            })
             .count()
     }
 

@@ -287,7 +287,7 @@ impl WebWorker {
     ///
     /// let progress: Progress = task.recv().await.expect("progress");
     /// task.send(&Continue { should_continue: true });
-    /// let result: ProcessResult = task.result().await;
+    /// let result: ProcessResult = task.result().await.expect("worker terminated");
     /// ```
     pub async fn run_channel<T, R>(&self, func: WebWorkerChannelFn<T, R>, arg: &T) -> ChannelTask<R>
     where
@@ -430,7 +430,14 @@ impl WebWorker {
         // Send the request and get a receiver for the result bytes.
         let result_rx = self.send_channel_request(func.name, arg, worker_port);
 
-        ChannelTask::new(channel, result_rx)
+        let worker = self.worker.clone();
+        let open_tasks = Rc::clone(&self.open_tasks);
+        let on_terminate = Box::new(move || {
+            worker.terminate();
+            open_tasks.borrow_mut().clear();
+        });
+
+        ChannelTask::with_lifecycle(channel, result_rx, None, Some(on_terminate))
     }
 
     /// This function handles the communication with the worker
@@ -554,11 +561,18 @@ impl WebWorker {
     pub fn last_active(&self) -> f64 {
         self.last_active.get()
     }
+
+    /// Terminate this worker and fail all tasks currently assigned to it.
+    pub(crate) fn terminate(&self) {
+        self.worker.terminate();
+        self.open_tasks.borrow_mut().clear();
+    }
 }
 
 impl Drop for WebWorker {
     fn drop(&mut self) {
         self.port.close();
         self.worker.terminate();
+        self.open_tasks.borrow_mut().clear();
     }
 }
