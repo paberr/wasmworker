@@ -1,3 +1,7 @@
+// The getters that `#[wasm_bindgen(getter_with_clone)]` generates for
+// `WorkerPoolOptions` clone every field, including the `Copy` ones.
+#![allow(clippy::clone_on_copy)]
+
 use std::{borrow::Borrow, cell::RefCell, rc::Rc};
 
 use futures::future::join_all;
