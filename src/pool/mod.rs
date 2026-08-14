@@ -306,7 +306,7 @@ impl WebWorkerPool {
     ///
     /// let progress: Progress = task.recv().await.expect("progress");
     /// task.send(&Continue { should_continue: true });
-    /// let result: ProcessResult = task.result().await;
+    /// let result: ProcessResult = task.result().await.expect("worker terminated");
     /// ```
     pub async fn run_channel<T, R>(&self, func: WebWorkerChannelFn<T, R>, arg: &T) -> ChannelTask<R>
     where
