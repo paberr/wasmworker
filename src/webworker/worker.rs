@@ -9,8 +9,8 @@ use super::com::*;
 use super::js::*;
 use js_sys::Array;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{oneshot, Semaphore};
-use wasm_bindgen::{prelude::Closure, JsCast, JsValue, UnwrapThrowExt};
+use tokio::sync::{oneshot, watch, Semaphore};
+use wasm_bindgen::{prelude::Closure, throw_str, JsCast, JsValue, UnwrapThrowExt};
 use web_sys::{
     Blob, BlobPropertyBag, MessageChannel, MessageEvent, MessagePort, Url, Worker, WorkerOptions,
     WorkerType,
@@ -68,6 +68,9 @@ pub struct WebWorker {
     _callback: Closure<Callback>,
     /// Timestamp (ms since epoch) of the last completed task, used for idle timeout tracking.
     last_active: Rc<Cell<f64>>,
+    /// Set to `true` once this worker has been terminated. Channel tasks subscribe
+    /// to this signal so that they can report the termination to their caller.
+    terminated: watch::Sender<bool>,
 }
 
 impl WebWorker {
@@ -220,6 +223,7 @@ impl WebWorker {
             open_tasks: tasks,
             _callback: callback_handle,
             last_active,
+            terminated: watch::channel(false).0,
         })
     }
 
@@ -287,7 +291,7 @@ impl WebWorker {
     ///
     /// let progress: Progress = task.recv().await.expect("progress");
     /// task.send(&Continue { should_continue: true });
-    /// let result: ProcessResult = task.result().await;
+    /// let result: ProcessResult = task.result().await.expect("worker terminated");
     /// ```
     pub async fn run_channel<T, R>(&self, func: WebWorkerChannelFn<T, R>, arg: &T) -> ChannelTask<R>
     where
@@ -430,7 +434,7 @@ impl WebWorker {
         // Send the request and get a receiver for the result bytes.
         let result_rx = self.send_channel_request(func.name, arg, worker_port);
 
-        ChannelTask::new(channel, result_rx)
+        ChannelTask::new(channel, result_rx, self.terminated.subscribe())
     }
 
     /// This function handles the communication with the worker
@@ -462,6 +466,10 @@ impl WebWorker {
     /// Sends a request to the worker and waits for the response.
     /// This is extracted from `force_run` to reduce monomorphisation cost.
     async fn send_request(&self, id: u32, request: Request, port: Option<MessagePort>) -> Vec<u8> {
+        if self.is_terminated() {
+            throw_str("WebWorker has been terminated");
+        }
+
         // Create channel and add task.
         let (sender, receiver) = oneshot::channel();
         self.open_tasks.borrow_mut().insert(id, sender);
@@ -490,7 +498,7 @@ impl WebWorker {
         // Handle result.
         receiver
             .await
-            .expect_throw("WebWorker gone")
+            .expect_throw("WebWorker was terminated before the task completed")
             .response
             .expect_throw("Could not find function")
     }
@@ -507,6 +515,10 @@ impl WebWorker {
     where
         T: Serialize + for<'de> Deserialize<'de>,
     {
+        if self.is_terminated() {
+            throw_str("WebWorker has been terminated");
+        }
+
         let id = self.current_task.fetch_add(1, Ordering::Relaxed);
         let request = Request {
             id,
@@ -554,11 +566,45 @@ impl WebWorker {
     pub fn last_active(&self) -> f64 {
         self.last_active.get()
     }
+
+    /// Terminate this worker.
+    ///
+    /// This is the only way to stop work that does not cooperate, for example a
+    /// long-running computation without a cancellation point, or a task that
+    /// spawned background work of its own. Prefer cooperative cancellation over
+    /// a [`crate::Channel`] where the task supports it: terminating discards the
+    /// worker, so the next task pays for the creation of a new one.
+    ///
+    /// Tasks that are still running on this worker are abandoned: pending
+    /// [`ChannelTask::result`] calls resolve to
+    /// [`crate::TaskError::WorkerTerminated`] and pending [`ChannelTask::recv`]
+    /// calls return `None`. Pending [`WebWorker::run`] calls cannot report an
+    /// error and panic instead, so terminate a worker only once the plain tasks
+    /// on it have completed.
+    ///
+    /// The worker cannot be used afterwards; further calls to `run` or
+    /// `run_channel` panic. Repeated calls to `terminate` are harmless.
+    /// Dropping a [`WebWorker`] terminates it as well.
+    pub fn terminate(&self) {
+        if self.terminated.send_replace(true) {
+            return;
+        }
+
+        self.port.close();
+        self.worker.terminate();
+
+        // Fail all tasks that were still running on this worker.
+        self.open_tasks.borrow_mut().clear();
+    }
+
+    /// Return whether this worker has been terminated.
+    pub fn is_terminated(&self) -> bool {
+        *self.terminated.borrow()
+    }
 }
 
 impl Drop for WebWorker {
     fn drop(&mut self) {
-        self.port.close();
-        self.worker.terminate();
+        self.terminate();
     }
 }

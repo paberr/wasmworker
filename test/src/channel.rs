@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use wasmworker::webworker_channel_fn;
-use wasmworker::{webworker_channel, worker_pool, Channel, WebWorker};
+use wasmworker::{webworker_channel, worker_pool, Channel, TaskError, WebWorker};
 
 use crate::js_assert_eq;
 
@@ -82,7 +82,7 @@ pub(crate) async fn can_use_channel_with_worker() {
     js_assert_eq!(final_progress.percent, 100, "Should be at 100%");
 
     // Now wait for the task result
-    let result = task.result().await;
+    let result = task.result().await.expect("Channel task should succeed");
     js_assert_eq!(result.items_processed, 10, "Should process all items");
     js_assert_eq!(result.was_cancelled, false, "Should not be cancelled");
 }
@@ -107,9 +107,55 @@ pub(crate) async fn can_cancel_channel_task() {
     });
 
     // Wait for result (no 100% progress expected since we cancelled)
-    let result = task.result().await;
+    let result = task.result().await.expect("Channel task should succeed");
     js_assert_eq!(result.items_processed, 5, "Should process half the items");
     js_assert_eq!(result.was_cancelled, true, "Should be cancelled");
+}
+
+/// Test that terminating a worker is reported to a channel task running on it.
+pub(crate) async fn terminating_worker_reports_channel_task_error() {
+    let worker = WebWorker::new(None).await.expect("Couldn't create worker");
+
+    let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    let task = worker
+        .run_channel(webworker_channel!(process_with_progress), &data)
+        .await;
+
+    // The task is now parked waiting for a `Continue` message, so it never
+    // completes on its own.
+    let progress: Progress = task.recv().await.expect("Should receive 50% progress");
+    js_assert_eq!(progress.percent, 50, "Should be at 50%");
+
+    worker.terminate();
+    js_assert_eq!(worker.is_terminated(), true, "Worker should be terminated");
+
+    // Both of these blocked forever before the worker reported its termination.
+    let channel_closed = task.recv::<Progress>().await.is_none();
+    js_assert_eq!(channel_closed, true, "recv() should report the termination");
+
+    let terminated = matches!(task.result().await, Err(TaskError::WorkerTerminated));
+    js_assert_eq!(terminated, true, "result() should report the termination");
+}
+
+/// Test that dropping a worker is reported to a channel task running on it.
+pub(crate) async fn dropping_worker_reports_channel_task_error() {
+    let worker = WebWorker::new(None).await.expect("Couldn't create worker");
+
+    let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    let task = worker
+        .run_channel(webworker_channel!(process_with_progress), &data)
+        .await;
+
+    let progress: Progress = task.recv().await.expect("Should receive 50% progress");
+    js_assert_eq!(progress.percent, 50, "Should be at 50%");
+
+    // Dropping the worker terminates it, which used to panic the pending result.
+    drop(worker);
+
+    let terminated = matches!(task.result().await, Err(TaskError::WorkerTerminated));
+    js_assert_eq!(terminated, true, "result() should report the termination");
 }
 
 /// Test that channel functions work with the worker pool.
@@ -136,7 +182,7 @@ pub(crate) async fn can_use_channel_with_pool() {
     js_assert_eq!(final_progress.percent, 100, "Should be at 100%");
 
     // Wait for completion
-    let result = task.result().await;
+    let result = task.result().await.expect("Channel task should succeed");
     js_assert_eq!(result.items_processed, 4, "Should process all items");
     js_assert_eq!(result.was_cancelled, false, "Should not be cancelled");
 }

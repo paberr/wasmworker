@@ -201,8 +201,35 @@ let progress: Progress = task.recv().await.unwrap();
 task.send(&Continue { should_continue: true });
 
 // Wait for task completion
-let result = task.result().await;
+let result = task.result().await?;
 ```
+
+#### Stopping a task
+
+A channel task is best stopped cooperatively, by sending it a message that its
+function checks for — the `Continue { should_continue: false }` message above is
+an example. The worker then unwinds normally and stays available for the next task.
+
+Work that does not cooperate — a computation without a cancellation point, or a
+task that spawned background work of its own — can only be stopped by terminating
+its worker. Run such a task on its own `WebWorker` and terminate that:
+
+```rust,ignore
+let worker = WebWorker::new(None).await?;
+let task = worker
+   .run_channel(webworker_channel!(process_with_progress), &data)
+   .await;
+
+worker.terminate();
+
+// recv() now returns None and result() reports the termination.
+assert_eq!(task.result().await, Err(TaskError::WorkerTerminated));
+```
+
+Terminating discards the worker, so this is a last resort rather than a routine
+cancellation: the next task pays for the creation of a new worker. Plain `run`
+tasks that are still in flight on that worker cannot report an error and panic
+instead, so only terminate a worker once its plain tasks have completed.
 
 ### Bundler support (Vite)
 The recommended approach for Vite is to place the wasm-pack output in Vite's `publicDir`.

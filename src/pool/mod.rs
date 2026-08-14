@@ -1,3 +1,7 @@
+// The getters that `#[wasm_bindgen(getter_with_clone)]` generates for
+// `WorkerPoolOptions` clone every field, including the `Copy` ones.
+#![allow(clippy::clone_on_copy)]
+
 use std::{borrow::Borrow, cell::RefCell, rc::Rc};
 
 use futures::future::join_all;
@@ -306,7 +310,7 @@ impl WebWorkerPool {
     ///
     /// let progress: Progress = task.recv().await.expect("progress");
     /// task.send(&Continue { should_continue: true });
-    /// let result: ProcessResult = task.result().await;
+    /// let result: ProcessResult = task.result().await.expect("worker terminated");
     /// ```
     pub async fn run_channel<T, R>(&self, func: WebWorkerChannelFn<T, R>, arg: &T) -> ChannelTask<R>
     where
