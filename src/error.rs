@@ -8,6 +8,18 @@ use thiserror::Error;
 #[error("WebWorker capacity reached")]
 pub struct Full;
 
+/// This error is returned when a channel task cannot produce a result.
+#[derive(Debug, Error, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TaskError {
+    /// The worker running the task was terminated before returning a result.
+    #[error("WebWorker was terminated")]
+    WorkerTerminated,
+    /// The channel task result was already consumed.
+    #[error("ChannelTask result already consumed")]
+    ResultAlreadyConsumed,
+}
+
 /// This error is returned during the creation of a new web worker.
 /// It covers generic errors in the actual creation and import errors
 /// during the initialization.

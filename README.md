@@ -201,8 +201,30 @@ let progress: Progress = task.recv().await.unwrap();
 task.send(&Continue { should_continue: true });
 
 // Wait for task completion
-let result = task.result().await;
+let result = task.result().await?;
 ```
+
+To cancel from another future, clone the task controller before moving the task:
+
+```rust,ignore
+let control = task.control();
+wasm_bindgen_futures::spawn_local(async move {
+    while let Some(progress) = task.recv::<Progress>().await {
+        // Handle progress.
+    }
+});
+
+control.terminate();
+```
+
+Termination wakes blocked `recv()` and `recv_bytes()` calls, which return `None`.
+Blocked `result()` calls return `TaskError::WorkerTerminated`. Repeated calls to
+`terminate()` are harmless.
+
+Pool channel tasks exclusively lease one worker until `result()` completes. Calling
+`terminate()`, or dropping an unfinished task, terminates that worker and replaces it
+in the same pool slot. The slot is unavailable to the scheduler until its replacement
+has initialized.
 
 ### Bundler support (Vite)
 The recommended approach for Vite is to place the wasm-pack output in Vite's `publicDir`.
@@ -270,6 +292,9 @@ let mut options = WorkerPoolOptions::new();
 options.precompile_wasm = Some(true);
 init_worker_pool(options).await.unwrap();
 ```
+
+The pool retains this compiled module and also uses it when replacing terminated
+workers, so replacement does not fetch the WASM binary again.
 
 ### Idle timeout
 
