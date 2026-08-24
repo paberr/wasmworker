@@ -97,6 +97,7 @@
 #![allow(clippy::borrowed_box)]
 pub use channel::Channel;
 pub use channel_task::ChannelTask;
+pub use error::TaskError;
 pub use global::{
     has_worker_pool, init_optimized_worker_pool, init_worker_pool, worker_pool, AlreadyInitialized,
 };

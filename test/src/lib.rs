@@ -40,6 +40,8 @@ pub async fn run_tests() {
     // Channel tests
     can_use_channel_with_worker().await;
     can_cancel_channel_task().await;
+    terminating_worker_reports_channel_task_error().await;
+    dropping_worker_reports_channel_task_error().await;
     can_use_channel_with_pool().await;
 
     // Pool configuration tests
